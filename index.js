@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors"
 import { connectDB } from "./src/db/connectDB.js";
 import authRoutes from "./src/Auth/routes/auth.route.js" 
+import skillAdminRoutes from "./src/routes/skillAdmin.route.js"
 
 dotenv.config() 
 
@@ -16,6 +17,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 app.use("/api/auth", authRoutes)
+app.use("/api/skills", skillAdminRoutes);
 
 connectDB()
   .then(() => {

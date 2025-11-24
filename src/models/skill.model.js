@@ -1,36 +1,54 @@
-// backend/src/models/skill.model.js
 import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
+/* ---------------------------- VARIANT SCHEMA ---------------------------- */
+
 const VariantSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    variantKey: { type: String, required: true, trim: true }, 
-    type: { type: String, enum: ["static", "dynamic"], required: true },
+
+    variantKey: { type: String, required: true, trim: true },
+
+    type: {
+      type: String,
+      enum: ["static", "dynamic"],
+      required: true,
+    },
 
     stats: {
-        pointsPerSecond: { type: Number, default: 0 },
-        energyPerSecond: { type: Number, default: 0 },
-        pointsPerRep: { type: Number, default: 0 },
-        energyPerRep: { type: Number, default: 0 },
-        },
+      pointsPerSecond: { type: Number, default: 0 },
+      energyPerSecond: { type: Number, default: 0 },
+      pointsPerRep: { type: Number, default: 0 },
+      energyPerRep: { type: Number, default: 0 },
+    },
 
     staticAu: { type: Number, default: 0 },
     dynamicAu: { type: Number, default: 0 },
 
-    difficulty: { type: String, default: "medium", trim: true },
+    difficulty: {
+      type: String,
+      enum: ["basic", "intermediate", "advanced", "elite", "legendary"],
+      default: "basic",
+      trim: true,
+    },
   },
   { timestamps: true }
 );
 
+/* ----------------------------- SKILL SCHEMA ----------------------------- */
 
 const SkillSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    skillKey: { type: String, required: true, unique: true, trim: true }, 
 
-    difficulty: { type: String, default: "medium", trim: true },
+    skillKey: { type: String, required: true, unique: true, trim: true },
+
+    difficulty: {
+      type: String,
+      enum: ["easy", "medium", "hard"],
+      default: "medium",
+    },
 
     variants: { type: [VariantSchema], default: [] },
   },
@@ -44,8 +62,7 @@ const SkillSchema = new Schema(
 SkillSchema.index({ skillKey: 1 }, { unique: true });
 
 SkillSchema.methods.getVariantByKey = function (variantKey) {
- return this.variants.find((v) => v.variantKey === variantKey) || null;
+  return this.variants.find((v) => v.variantKey === variantKey) || null;
 };
-
 
 export default mongoose.model("Skill", SkillSchema);
