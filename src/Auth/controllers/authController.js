@@ -1,4 +1,4 @@
-import User from "../../models/User.model.js"
+import User from "../../models/user.model.js"
 import bcrypt from "bcryptjs"
 /* import { sendPasswordResetEmail, sendResetSuccessEmail, sendVerificationEmail, sendWelcomeEmail } from "../../resend/emails.js" */
 import crypto from "crypto"

@@ -1,4 +1,3 @@
-// backend/src/models/userSkill.model.js
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 

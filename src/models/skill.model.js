@@ -42,7 +42,7 @@ const SkillSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
 
-    skillKey: { type: String, required: true, unique: true, trim: true },
+    skillKey: { type: String, required: true, trim: true },
 
     difficulty: {
       type: String,
