@@ -3,7 +3,14 @@ const { Schema } = mongoose;
 
 const UserSkillVariantSchema = new Schema(
   {
-    variantKey: { type: String, required: true }, 
+    variantKey: { type: String, required: true },
+    fingers: {
+      type: Number,
+      required: true,
+      enum: [1, 2, 5],
+      default: 5,
+    },
+    video: { type: String, required: true },
   },
   { _id: false }
 );

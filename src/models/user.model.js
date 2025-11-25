@@ -94,11 +94,11 @@ const UserSchema = new Schema(
     ],
 
     favoriteSkills: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Skill",
-      },
-    ],
+    {
+    userSkill: { type: Schema.Types.ObjectId, ref: "UserSkill", required: true },
+    variantKey: { type: String, required: true }
+    }
+],
 
     favoriteCombos: {
       static: { type: Schema.Types.ObjectId, ref: "Combo", default: null },

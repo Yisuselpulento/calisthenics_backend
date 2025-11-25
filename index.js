@@ -7,6 +7,7 @@ import { connectDB } from "./src/db/connectDB.js";
 import authRoutes from "./src/Auth/routes/auth.route.js" 
 import skillAdminRoutes from "./src/routes/skillAdmin.route.js"
 import updateProfile from "./src/routes/profile.route.js"
+import userSkillRoutes from "./src/routes/userSkills.route.js";
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -19,6 +20,7 @@ app.use(cookieParser())
 app.use("/api/auth", authRoutes)
 app.use("/api/profile/update", updateProfile);
 app.use("/api/skills", skillAdminRoutes);
+app.use("/api/user-skills", userSkillRoutes);
 
 connectDB()
   .then(() => {

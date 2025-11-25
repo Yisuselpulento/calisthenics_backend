@@ -10,10 +10,10 @@ const MAX_ATTEMPTS = 5;
 const isValidEmail = (email) => /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(email);
 
 export const signup = async (req, res) => {
-    const { email, password, fullName, username, gender } = req.body;
+    const { email, password, fullName, username, gender, profileType } = req.body;
 
     try {
-        if (!email || !password || !fullName || !username || !gender) {
+        if (!email || !password || !fullName || !username || !gender || !profileType ) {
             return res.status(400).json({
                 success: false,
                 message: "Todos los campos son requeridos.",
@@ -31,6 +31,13 @@ export const signup = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "El género debe ser 'male' o 'female'.",
+            });
+        }
+
+        if (!["static", "dynamic"].includes(profileType)) {
+            return res.status(400).json({
+                success: false,
+                message: "profileType debe ser 'static' o 'dynamic'.",
             });
         }
 
@@ -88,6 +95,7 @@ export const signup = async (req, res) => {
             fullName,
             username,
             gender,
+            profileType, 
 
             verificationToken,
             verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
@@ -108,6 +116,7 @@ export const signup = async (req, res) => {
                 username: user.username,
                 fullName: user.fullName,
                 gender: user.gender,
+                profileType: user.profileType,
                 isVerified: user.isVerified,
             },
         });
