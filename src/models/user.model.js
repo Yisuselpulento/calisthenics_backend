@@ -58,6 +58,12 @@ const UserSchema = new Schema(
 
     /* ---------------------- PROFILE ---------------------- */
 
+    profileType: {
+      type: String,
+      enum: ["static", "dynamic"],
+      default: "static",
+    },
+
     avatar: String,
     country: String,
     altura: Number,

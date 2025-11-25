@@ -60,7 +60,7 @@ export const updateProfile = async (req, res) => {
 export const updateAdvancedProfile = async (req, res) => {
   try {
     const userId = req.userId;
-    const { username, email, password, country } = req.body;
+    const { username, email, password, country, profileType  } = req.body;
 
     const user = await User.findById(userId);
     if (!user)
@@ -120,6 +120,18 @@ export const updateAdvancedProfile = async (req, res) => {
 
     if (country) {
       updates.country = country;
+      editedSomething = true;
+    }
+
+    if (profileType) {
+      if (!["static", "dynamic"].includes(profileType)) {
+        return res.status(400).json({
+          success: false,
+          message: "profileType inválido. Usa: static | dynamic",
+        });
+      }
+
+      updates.profileType = profileType;
       editedSomething = true;
     }
 
