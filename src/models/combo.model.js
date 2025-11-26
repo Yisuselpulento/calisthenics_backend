@@ -10,10 +10,24 @@ const ComboElementSchema = new Schema(
       required: true,
     },
 
+    // 🔥 NUEVO: referenciar el skill original
+    skill: {
+      type: Schema.Types.ObjectId,
+      ref: "Skill",
+      required: true,
+    },
+
+    variantKey: {
+      type: String,
+      required: true,
+    },
+
+    variantData: { type: Schema.Types.Mixed, required: true },
+
     hold: {
       type: Number,
       required: true,
-      min: 3, 
+      min: 3,
     },
   },
   { _id: false }
@@ -28,10 +42,10 @@ const ComboSchema = new Schema(
     },
 
     name: {
-        type: String,
-        required: true,
-        trim: true,
-        },
+      type: String,
+      required: true,
+      trim: true,
+    },
 
     type: {
       type: String,
