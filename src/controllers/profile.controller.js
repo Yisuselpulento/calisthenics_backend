@@ -52,6 +52,8 @@ export const getProfileByUsername = async (req, res) => {
       avatar: user.avatar,
       gender: user.gender,
       profileType: user.profileType,
+       peso: user.peso,       // <-- agregado
+      altura: user.altura,
       stats: user.stats,
       ranking: user.ranking,
       followers: user.followers,
