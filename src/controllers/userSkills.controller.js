@@ -51,7 +51,7 @@ export const addSkillVariant = async (req, res) => {
       user: userId,
       type: "NEW_SKILL",
       message: feedMessage,
-      metadata: { skillId: skillId, variantKey, fingers: Number(fingers) },
+      metadata: { skillId: skillId, variantKey, fingers: Number(fingers),  videoUrl: result.secure_url, },
     });
 
     res.json({ success: true, message: "Variante agregada correctamente", userSkill });
