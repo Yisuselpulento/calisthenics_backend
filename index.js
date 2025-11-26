@@ -22,7 +22,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 app.use("/api/auth", authRoutes)
-app.use("/api/profile/update", updateProfile);
+app.use("/api/profile", updateProfile);
 app.use("/api/skills", skillAdminRoutes);
 app.use("/api/user-skills", userSkillRoutes);
 app.use("/api/combos", comboRoutes);

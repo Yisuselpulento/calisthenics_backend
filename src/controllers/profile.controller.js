@@ -1,6 +1,88 @@
-import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import { deleteFromCloudinary, uploadToCloudinary } from "../utils/uploadToCloudinary.js";
+import User from "../models/user.model.js";
+import UserSkill from "../models/userSkill.model.js";
+import Combo from "../models/combo.model.js";
+import Team from "../models/team.model.js";
+import Match from "../models/match.model.js";
+import Notification from "../models/notification.model.js";
+import Skill from "../models/skill.model.js";
+
+export const getProfileByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    // Buscar usuario por username
+    const user = await User.findOne({ username })
+      .populate({
+        path: "skills",
+        populate: {
+          path: "skill",
+          model: "Skill",
+        },
+      })
+      .populate({
+        path: "combos",
+        populate: [
+          { path: "elements.userSkill", model: "UserSkill" },
+          { path: "elements.skill", model: "Skill" },
+        ],
+      })
+      .populate("teams")
+      .populate("followers", "username fullName avatar")
+      .populate("following", "username fullName avatar")
+      .populate({
+        path: "favoriteSkills.userSkill",
+        populate: {
+          path: "skill",
+          model: "Skill",
+        },
+      });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    }
+
+    // Construir la respuesta filtrando campos sensibles
+    const userProfile = {
+      _id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      email: req.userId === user._id.toString() ? user.email : undefined, // solo dueño ve email
+      avatar: user.avatar,
+      gender: user.gender,
+      profileType: user.profileType,
+      stats: user.stats,
+      ranking: user.ranking,
+      followers: user.followers,
+      following: user.following,
+      teams: user.teams,
+      skills: user.skills.map(us => ({
+        _id: us._id,
+        skill: us.skill,
+        variants: us.variants,
+      })),
+      combos: user.combos.map(c => ({
+        _id: c._id,
+        name: c.name,
+        type: c.type,
+        elements: c.elements,
+        totalPoints: c.totalPoints,
+        totalEnergyCost: c.totalEnergyCost,
+      })),
+      favoriteSkills: user.favoriteSkills.map(fs => ({
+        userSkill: fs.userSkill,
+        variantKey: fs.variantKey,
+      })),
+      favoriteCombos: user.favoriteCombos,
+    };
+
+    res.status(200).json({ success: true, user: userProfile });
+  } catch (error) {
+    console.error("Error en getProfileByUsername:", error);
+    res.status(500).json({ success: false, message: "Error interno del servidor" });
+  }
+};
 
 
 export const updateProfile = async (req, res) => {
