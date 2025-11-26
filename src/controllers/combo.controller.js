@@ -3,6 +3,7 @@ import User from "../models/user.model.js";
 import UserSkill from "../models/userSkill.model.js";
 import Skill from "../models/skill.model.js"; // para conocer las variantes y stats
 import { calculateEnergyCost } from "../utils/calculateEnergyCost.js";
+import FeedEvent from "../models/feedEvent.model.js";
 
 /* ---------------------------- CREATE ---------------------------- */
 
@@ -95,6 +96,14 @@ export const createCombo = async (req, res) => {
 
     user.combos.push(combo._id);
     await user.save();
+
+    const feedMessage = `creó un nuevo combo: ${name} (${type})`;
+    await FeedEvent.create({
+      user: userId,
+      type: "NEW_COMBO",
+      message: feedMessage,
+      metadata: { comboId: combo._id, type }
+    });
 
     return res.status(201).json({
       success: true,

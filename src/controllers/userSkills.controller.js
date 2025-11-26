@@ -2,6 +2,7 @@ import UserSkill from "../models/userSkill.model.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
 import User from "../models/user.model.js";
 import Skill from "../models/skill.model.js";
+import FeedEvent from "../models/feedEvent.model.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
@@ -43,6 +44,15 @@ export const addSkillVariant = async (req, res) => {
         { $addToSet: { skills: userSkill._id } }, 
         { new: true }
         );
+
+    const feedMessage = `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`;
+
+    await FeedEvent.create({
+      user: userId,
+      type: "NEW_SKILL",
+      message: feedMessage,
+      metadata: { skillId: skillId, variantKey, fingers: Number(fingers) },
+    });
 
     res.json({ success: true, message: "Variante agregada correctamente", userSkill });
   } catch (err) {

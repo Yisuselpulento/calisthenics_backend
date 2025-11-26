@@ -9,6 +9,9 @@ import skillAdminRoutes from "./src/routes/skillAdmin.route.js"
 import updateProfile from "./src/routes/profile.route.js"
 import userSkillRoutes from "./src/routes/userSkills.route.js";
 import comboRoutes from "./src/routes/combo.route.js";
+import userFollowRoutes from "./src/routes/userFollow.route.js";
+import reportRoutes from "./src/routes/report.route.js";
+import notificationRoutes from "./src/routes/notification.route.js";
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -23,6 +26,9 @@ app.use("/api/profile/update", updateProfile);
 app.use("/api/skills", skillAdminRoutes);
 app.use("/api/user-skills", userSkillRoutes);
 app.use("/api/combos", comboRoutes);
+app.use("/api/user-follow", userFollowRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 connectDB()
   .then(() => {
