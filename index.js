@@ -12,6 +12,8 @@ import comboRoutes from "./src/routes/combo.route.js";
 import userFollowRoutes from "./src/routes/userFollow.route.js";
 import reportRoutes from "./src/routes/report.route.js";
 import notificationRoutes from "./src/routes/notification.route.js";
+import userRoutes from "./src/routes/user.route.js";
+import feedRoutes from "./src/routes/feed.route.js";
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -29,6 +31,8 @@ app.use("/api/combos", comboRoutes);
 app.use("/api/user-follow", userFollowRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/feed", feedRoutes);
 
 connectDB()
   .then(() => {
