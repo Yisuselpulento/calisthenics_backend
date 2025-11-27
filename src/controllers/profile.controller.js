@@ -44,26 +44,47 @@ export const getProfileByUsername = async (req, res) => {
     }
 
     // Construir la respuesta filtrando campos sensibles
-    const userProfile = {
-      _id: user._id,
-      username: user.username,
-      fullName: user.fullName,
-      email: req.userId === user._id.toString() ? user.email : undefined, // solo dueño ve email
-      avatar: user.avatar,
-      gender: user.gender,
-      profileType: user.profileType,
-       peso: user.peso,       // <-- agregado
-      altura: user.altura,
-      stats: user.stats,
-      ranking: user.ranking,
-      followers: user.followers,
-      following: user.following,
-      teams: user.teams,
-      skills: user.skills.map(us => ({
-        _id: us._id,
-        skill: us.skill,
-        variants: us.variants,
-      })),
+   const userProfile = {
+  _id: user._id,
+  username: user.username,
+  fullName: user.fullName,
+  email: req.userId === user._id.toString() ? user.email : undefined,
+  avatar: user.avatar,
+  gender: user.gender,
+  profileType: user.profileType,
+  peso: user.peso,
+  altura: user.altura,
+  stats: user.stats,
+  ranking: user.ranking,
+  followers: user.followers,
+  following: user.following,
+  teams: user.teams,
+  skills: user.skills.map((us) => {
+    // mapear variantes combinando UserSkill + Skill
+    const variantsWithStats = us.variants.map((userVariant) => {
+      const skillVariant = us.skill.variants.find(
+        (v) => v.variantKey === userVariant.variantKey
+      );
+
+      return {
+        _id: userVariant._id,
+        variantKey: userVariant.variantKey,
+        fingers: userVariant.fingers,
+        video: userVariant.video,
+        name: skillVariant?.name || userVariant.variantKey, // nombre de la variante
+        type: skillVariant?.type || "static",
+        stats: skillVariant?.stats || {},    // <-- stats de la variante
+        staticAU: skillVariant?.staticAu || 0,
+        dynamicAU: skillVariant?.dynamicAu || 0,
+      };
+    });
+
+        return {
+          _id: us._id,
+          skill: us.skill,
+          variants: variantsWithStats,
+        };
+      }),
       combos: user.combos.map(c => ({
         _id: c._id,
         name: c.name,
