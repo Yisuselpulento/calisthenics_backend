@@ -18,7 +18,27 @@ import feedRoutes from "./src/routes/feed.route.js";
 const app = express()
 const PORT = process.env.PORT || 5000
 
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+const allowedOrigins = [
+  "https://calisthenicsfrontend.netlify.app",
+  "http://localhost:5173" // para desarrollo
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permitir peticiones sin origin (Postman, SSR)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.log("❌ CORS bloqueado para:", origin);
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 
 app.use(express.json())
 app.use(cookieParser())
