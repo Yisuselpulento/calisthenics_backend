@@ -68,7 +68,10 @@ const UserSchema = new Schema(
      type: String,
       default: "https://upload.wikimedia.org/wikipedia/commons/b/b5/Windows_10_Default_Profile_Picture.svg",
     },
-    country: String,
+    country: {
+  type: String,
+  default: "",
+},
     altura: Number,
     peso: Number,
     videoProfile: String,
