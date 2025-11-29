@@ -71,10 +71,10 @@ const UserSchema = new Schema(
     country: {
   type: String,
   default: "",
-},
-    altura: Number,
-    peso: Number,
-    videoProfile: String,
+    },  
+ altura: { type: Number, default: 0 },
+peso: { type: Number, default: 0 },
+videoProfile: { type: String, default: "" },
 
     stats: {
       mainAura: { type: Number, default: 0 },

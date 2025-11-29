@@ -37,7 +37,7 @@ export const getProfileByUsername = async (req, res) => {
           path: "skill",
           model: "Skill",
         },
-      });
+      })
 
     if (!user) {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });

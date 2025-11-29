@@ -110,15 +110,7 @@ export const signup = async (req, res) => {
         return res.status(201).json({
             success: true,
             message: "Usuario creado exitosamente.",
-            user: {
-                _id: user._id,
-                email: user.email,
-                username: user.username,
-                fullName: user.fullName,
-                gender: user.gender,
-                profileType: user.profileType,
-                isVerified: user.isVerified,
-            },
+            user
         });
 
     } catch (error) {
@@ -188,15 +180,7 @@ export const login = async (req,res) => {
 		 res.status(200).json({
             success: true,
             message: "Inicio de sesión exitoso",
-            user: {
-                _id: user._id,
-                email: user.email,
-                username: user.username,
-                fullName: user.fullName,
-                gender: user.gender,
-                isVerified: user.isVerified,
-                ranking: user.ranking,
-            }
+            user
         });
 	} catch (error) {
 		console.log("Error al iniciar session ", error);
@@ -337,22 +321,37 @@ export const resetPassword = async (req, res) => {
 };
 
 export const checkAuth = async (req, res) => {
-	try {
-		if (!req.userId) {
-			return res.status(401).json({ success: false, message: "No autenticado" });
-		}
+  try {
+    if (!req.userId) {
+      return res
+        .status(401)
+        .json({ success: false, message: "No autenticado" });
+    }
 
-		const user = await User.findById(req.userId).select("-password -verificationToken -verificationTokenExpiresAt -loginAttempts -lastEditAt -__v");
-		if (!user) {
-			return res.status(404).json({ success: false, message: "User not found" });
-		}
+    const user = await User.findById(req.userId)
+      .select(
+        "_id username fullName email videoProfile avatar gender notifications isAdmin isVerified profileType country altura peso notificationsCount ranking"
+      )
+      .populate({
+        path: "notifications",
+        select: "type message read createdAt fromUser relatedSkill relatedCombo relatedTeam",
+        options: { sort: { createdAt: -1 }, limit: 5 }, // las últimas 5
+        populate: { path: "fromUser", select: "username fullName avatar" }
+      });
 
-		res.status(200).json({ success: true, user });
-	} catch (error) {
-		console.log("Error in checkAuth ", error);
-		res.status(500).json({ success: false, message: error.message });
-	}
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.log("Error in checkAuth ", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
+
 
 export const resendVerificationToken = async (req, res) => {
     const userId = req.userId; 
