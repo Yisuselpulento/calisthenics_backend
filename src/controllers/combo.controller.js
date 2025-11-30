@@ -4,6 +4,7 @@ import UserSkill from "../models/userSkill.model.js";
 import Skill from "../models/skill.model.js"; // para conocer las variantes y stats
 import { calculateEnergyCost } from "../utils/calculateEnergyCost.js";
 import FeedEvent from "../models/feedEvent.model.js";
+import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 /* ---------------------------- CREATE ---------------------------- */
 
@@ -105,12 +106,14 @@ export const createCombo = async (req, res) => {
       metadata: { comboId: combo._id, type }
     });
 
+    const updatedUser = await UpdateFullUser(userId);
+
     return res.status(201).json({
       success: true,
       message: "Combo creado exitosamente.",
-      combo
+      combo,
+      user: updatedUser
     });
-
   } catch (err) {
     return res.status(500).json({
       success: false,
@@ -282,7 +285,13 @@ export const deleteCombo = async (req, res) => {
       }
     });
 
-    return res.status(200).json({ success: true, message: "Combo eliminado correctamente" });
+   const updatedUser = await UpdateFullUser(userId);
+
+      return res.status(200).json({
+        success: true,
+        message: "Combo eliminado correctamente",
+        user: updatedUser
+      });
 
   } catch (error) {
     return res.status(500).json({ success: false, message: "Error eliminando combo", error: error.message });
@@ -350,7 +359,14 @@ export const updateCombo = async (req, res) => {
 
     await combo.save();
 
-    return res.status(200).json({ success: true, message: "Combo actualizado correctamente", combo });
+    const updatedUser = await UpdateFullUser(userId);
+
+        return res.status(200).json({
+          success: true,
+          message: "Combo actualizado correctamente",
+          combo,
+          user: updatedUser
+        });
 
   } catch (err) {
     console.error("Error en updateCombo:", err);
@@ -391,11 +407,14 @@ export const toggleFavoriteCombo = async (req, res) => {
 
     await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: `Combo favorito ${type} actualizado correctamente`,
-      favoriteCombos: user.favoriteCombos
-    });
+    const updatedUser = await UpdateFullUser(userId);
+
+        return res.status(200).json({
+          success: true,
+          message: `Combo favorito ${type} actualizado correctamente`,
+          favoriteCombos: updatedUser.favoriteCombos,
+          user: updatedUser
+        });
 
   } catch (error) {
     return res.status(500).json({ success: false, message: "Error actualizando combo favorito", error: error.message });

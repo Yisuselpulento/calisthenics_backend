@@ -3,6 +3,7 @@ import Notification from "../models/notification.model.js";
 import Team from "../models/team.model.js";
 import Skill from "../models/skill.model.js";
 import Combo from "../models/combo.model.js";
+import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 /* ---------------------- OBTENER NOTIFICACIONES DEL USUARIO ---------------------- */
 export const getUserNotifications = async (req, res) => {
@@ -38,7 +39,13 @@ export const markNotificationAsRead = async (req, res) => {
     // Actualizar el contador de notificaciones no leídas
     await User.findByIdAndUpdate(userId, { $inc: { notificationsCount: -1 } });
 
-    res.status(200).json({ success: true, message: "Notificación marcada como leída." });
+    const updatedUser = await UpdateFullUser(userId);
+
+        res.status(200).json({
+          success: true,
+          message: "Notificación marcada como leída.",
+          user: updatedUser
+        });
   } catch (error) {
     console.error("markNotificationAsRead:", error);
     res.status(500).json({ success: false, message: "Error al marcar notificación como leída." });
@@ -55,7 +62,13 @@ export const markAllNotificationsAsRead = async (req, res) => {
     // Resetear contador de notificaciones no leídas
     await User.findByIdAndUpdate(userId, { notificationsCount: 0 });
 
-    res.status(200).json({ success: true, message: "Todas las notificaciones marcadas como leídas." });
+    const updatedUser = await UpdateFullUser(userId);
+
+      res.status(200).json({
+        success: true,
+        message: "Todas las notificaciones marcadas como leídas.",
+        user: updatedUser
+      });
   } catch (error) {
     console.error("markAllNotificationsAsRead:", error);
     res.status(500).json({ success: false, message: "Error al marcar todas las notificaciones como leídas." });

@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
 import mongoose from "mongoose";
+import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 /* ---------------------- OBTENER FOLLOWERS ---------------------- */
 export const getFollowers = async (req, res) => {
@@ -35,8 +36,8 @@ export const getFollowing = async (req, res) => {
 /* ---------------------- TOGGLE FOLLOW ---------------------- */
 export const toggleFollow = async (req, res) => {
   try {
-    const { userId } = req.params; // usuario que queremos seguir/dejar de seguir
-    const currentUserId = req.userId; // usuario logueado (debe venir del middleware auth)
+    const { userId } = req.params; 
+    const currentUserId = req.userId; 
 
     if (userId === currentUserId) {
       return res.status(400).json({ success: false, message: "No puedes seguirte a ti mismo." });
@@ -77,11 +78,13 @@ export const toggleFollow = async (req, res) => {
     await currentUser.save();
     await userToFollow.save();
 
-    res.status(200).json({
+    const updatedUser = await UpdateFullUser(currentUserId);
+
+    res.json({
       success: true,
-      message: isFollowing ? "Has dejado de seguir al usuario." : "Ahora sigues al usuario.",
-      following: !isFollowing,
+      user: updatedUser,
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Error al seguir/dejar de seguir al usuario." });

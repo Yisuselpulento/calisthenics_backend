@@ -54,7 +54,13 @@ export const addSkillVariant = async (req, res) => {
       metadata: { skillId: skillId, variantKey, fingers: Number(fingers),  videoUrl: result.secure_url, },
     });
 
-    res.json({ success: true, message: "Variante agregada correctamente", userSkill });
+    const fullUser = await UpdateFullUser(userId);
+
+      return res.json({
+        success: true,
+        message: "Variante agregada correctamente",
+        user: fullUser,
+      });
   } catch (err) {
     console.error("addSkillVariant:", err);
     res.status(500).json({ success: false, message: "Error del servidor" });
@@ -281,12 +287,14 @@ export const toggleFavoriteSkill = async (req, res) => {
 
       await user.save();
 
+      const fullUser = await UpdateFullUser(userId);
+
       return res.json({
         success: true,
         message: "Variante removida de favoritas",
-        favoriteSkills: user.favoriteSkills,
+        user: fullUser,
       });
-    }
+          }
 
     // --- Verificar máximo 3 ---
     if (user.favoriteSkills.length >= 3) {
@@ -304,10 +312,12 @@ export const toggleFavoriteSkill = async (req, res) => {
 
     await user.save();
 
-    res.json({
+    const fullUser = await UpdateFullUser(userId);
+
+    return res.json({
       success: true,
       message: "Variante agregada a favoritas",
-      favoriteSkills: user.favoriteSkills,
+      user: fullUser,
     });
 
   } catch (err) {

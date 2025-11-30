@@ -7,6 +7,7 @@ import Team from "../models/team.model.js";
 import Match from "../models/match.model.js";
 import Notification from "../models/notification.model.js";
 import Skill from "../models/skill.model.js";
+import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 export const getProfileByUsername = async (req, res) => {
   try {
@@ -149,11 +150,13 @@ export const updateProfile = async (req, res) => {
       { new: true }
     ).select("-password");
 
-    res.json({
-      success: true,
-      message: "Perfil actualizado correctamente",
-      user: updatedUser,
-    });
+    const fullUser = await UpdateFullUser(userId);
+
+        res.json({
+          success: true,
+          message: "Perfil actualizado correctamente",
+          user: fullUser,
+        });
 
   } catch (error) {
     console.error("updateProfile error:", error);
@@ -163,9 +166,12 @@ export const updateProfile = async (req, res) => {
 
 
 export const updateAdvancedProfile = async (req, res) => {
+   console.log("updateAdvancedProfile called with body:", req.body);
   try {
     const userId = req.userId;
-    const { username, email, password, country, profileType  } = req.body;
+    const { username, email, password,  profileType  } = req.body;
+
+   
 
     const user = await User.findById(userId);
     if (!user)
@@ -223,11 +229,6 @@ export const updateAdvancedProfile = async (req, res) => {
       editedSomething = true;
     }
 
-    if (country) {
-      updates.country = country;
-      editedSomething = true;
-    }
-
     if (profileType) {
       if (!["static", "dynamic"].includes(profileType)) {
         return res.status(400).json({
@@ -244,16 +245,15 @@ export const updateAdvancedProfile = async (req, res) => {
       updates.lastEditAt = new Date();
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { $set: updates },
-      { new: true }
-    ).select("-password");
+    await User.findByIdAndUpdate(userId, { $set: updates });
+
+    // 🔥 Asegurar usuario COMPLETO con skills, combos, etc.
+    const fullUser = await UpdateFullUser(userId);
 
     return res.json({
       success: true,
       message: "Perfil avanzado actualizado correctamente",
-      user: updatedUser,
+      user: fullUser,
     });
 
   } catch (error) {

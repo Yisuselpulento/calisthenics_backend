@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 /* import { sendPasswordResetEmail, sendResetSuccessEmail, sendVerificationEmail, sendWelcomeEmail } from "../../resend/emails.js" */
 import crypto from "crypto"
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
+import { UpdateFullUser } from "../../utils/updateFullUser.js";
 
 const LOCK_TIME = 15 * 60 * 1000; 
 const MAX_ATTEMPTS = 5;
@@ -107,11 +108,13 @@ export const signup = async (req, res) => {
 
         generateTokenAndSetCookie(res, user);
 
-        return res.status(201).json({
-            success: true,
-            message: "Usuario creado exitosamente.",
-            user
-        });
+        const fullUser = await UpdateFullUser(user._id);
+
+            return res.status(201).json({
+                success: true,
+                message: "Usuario creado exitosamente.",
+                user: fullUser
+            });
 
     } catch (error) {
         console.error("Error en signup:", error);
@@ -177,11 +180,13 @@ export const login = async (req,res) => {
 
 		generateTokenAndSetCookie(res, user)
 
-		 res.status(200).json({
-            success: true,
-            message: "Inicio de sesión exitoso",
-            user
-        });
+		 const fullUser = await UpdateFullUser(user._id);
+
+                    res.status(200).json({
+                    success: true,
+                    message: "Inicio de sesión exitoso",
+                    user: fullUser
+                    });
 	} catch (error) {
 		console.log("Error al iniciar session ", error);
 		res.status(500).json({ success: false, message: error.message });
@@ -217,11 +222,14 @@ export const verifyEmail = async (req,res)=>{
 
 		/*  await sendWelcomeEmail(user.email, user.username); */
 
-		res.status(200).json({
-			success: true,
-			message: "Email verificado exitosamente",
-			user: { isVerified: user.isVerified },
-		});
+		const fullUser = await UpdateFullUser(user._id);
+
+                res.status(200).json({
+                success: true,
+                message: "Email verificado exitosamente",
+                user: fullUser
+                });
+
 	} catch (error) {
 		console.log("error en verificar Email ", error);
 		res.status(500).json({ success: false, message: "Server error" });
@@ -313,7 +321,13 @@ export const resetPassword = async (req, res) => {
 
 		/* await sendResetSuccessEmail(user.email);  */
 
-		res.status(200).json({ success: true, message: "Password reset exitosamente" });
+		const fullUser = await UpdateFullUser(user._id);
+
+            res.status(200).json({
+            success: true,
+            message: "Password reset exitosamente",
+            user: fullUser
+            });
 	} catch (error) {
 		console.log("Error in resetPassword ", error);
 		res.status(500).json({ success: false, message: error.message });
