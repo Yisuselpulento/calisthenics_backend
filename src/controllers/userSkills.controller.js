@@ -3,12 +3,15 @@ import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloud
 import User from "../models/user.model.js";
 import Skill from "../models/skill.model.js";
 import FeedEvent from "../models/feedEvent.model.js";
+import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
+
   try {
     const userId = req.userId;
     const { skillId, variantKey, fingers = 5 } = req.body;
+
 
     if (!skillId || !variantKey || ![1, 2, 5].includes(Number(fingers))) {
       return res.status(400).json({ success: false, message: "Faltan datos o fingers inválido" });
@@ -210,11 +213,20 @@ export const deleteSkillVariant = async (req, res) => {
 
     await userSkill.save();
 
-    res.json({
-      success: true,
-      message: "Variante eliminada correctamente",
-      userSkill,
+    await FeedEvent.deleteMany({
+      user: userId,
+      "metadata.skillId": userSkill.skill.toString(),
+      "metadata.variantKey": variantKey,
+      "metadata.fingers": Number(fingers)
     });
+
+    const fullUser = await UpdateFullUser(userId);
+
+      return res.json({
+        success: true,
+        message: "Variante eliminada correctamente",
+        user: fullUser,
+      });
 
   } catch (err) {
     console.error("deleteSkillVariant:", err);

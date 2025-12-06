@@ -45,8 +45,6 @@ export const deleteFromCloudinary = async (url) => {
       resource_type: isVideo ? "video" : "image",
     });
 
-    console.log("Cloudinary deleted:", publicId);
-
   } catch (err) {
     console.error("Error eliminando archivo de Cloudinary:", err);
   }

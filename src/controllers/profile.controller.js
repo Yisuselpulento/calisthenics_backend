@@ -1,111 +1,20 @@
 import bcrypt from "bcryptjs";
 import { deleteFromCloudinary, uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 import User from "../models/user.model.js";
-import UserSkill from "../models/userSkill.model.js";
-import Combo from "../models/combo.model.js";
-import Team from "../models/team.model.js";
-import Match from "../models/match.model.js";
-import Notification from "../models/notification.model.js";
-import Skill from "../models/skill.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 
 export const getProfileByUsername = async (req, res) => {
   try {
     const { username } = req.params;
+    const user = await User.findOne({ username }).select("_id");
 
-    // Buscar usuario por username
-    const user = await User.findOne({ username })
-      .populate({
-        path: "skills",
-        populate: {
-          path: "skill",
-          model: "Skill",
-        },
-      })
-      .populate({
-        path: "combos",
-        populate: [
-          { path: "elements.userSkill", model: "UserSkill" },
-          { path: "elements.skill", model: "Skill" },
-        ],
-      })
-      .populate("teams")
-      .populate("followers", "username fullName avatar")
-      .populate("following", "username fullName avatar")
-      .populate({
-        path: "favoriteSkills.userSkill",
-        populate: {
-          path: "skill",
-          model: "Skill",
-        },
-      })
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
-    }
+    const fullUser = await UpdateFullUser(user._id.toString(), req.userId);
 
-    // Construir la respuesta filtrando campos sensibles
-   const userProfile = {
-  _id: user._id,
-  username: user.username,
-  fullName: user.fullName,
-  email: req.userId === user._id.toString() ? user.email : undefined,
-  avatar: user.avatar,
-  gender: user.gender,
-  profileType: user.profileType,
-  videoProfile: user.videoProfile,
-  country: user.country,
-  peso: user.peso,
-  altura: user.altura,
-  stats: user.stats,
-  ranking: user.ranking,
-  followers: user.followers,
-  following: user.following,
-  teams: user.teams,
-  skills: user.skills.map((us) => {
-    // mapear variantes combinando UserSkill + Skill
-    const variantsWithStats = us.variants.map((userVariant) => {
-      const skillVariant = us.skill.variants.find(
-        (v) => v.variantKey === userVariant.variantKey
-      );
+    res.json({ success: true, user: fullUser });
 
-      return {
-        _id: userVariant._id,
-        variantKey: userVariant.variantKey,
-        fingers: userVariant.fingers,
-        video: userVariant.video,
-        name: skillVariant?.name || userVariant.variantKey, // nombre de la variante
-        type: skillVariant?.type || "static",
-        stats: skillVariant?.stats || {},    // <-- stats de la variante
-        staticAU: skillVariant?.staticAu || 0,
-        dynamicAU: skillVariant?.dynamicAu || 0,
-      };
-    });
-
-        return {
-          _id: us._id,
-          skill: us.skill,
-          variants: variantsWithStats,
-        };
-      }),
-      combos: user.combos.map(c => ({
-        _id: c._id,
-        name: c.name,
-        type: c.type,
-        elements: c.elements,
-        totalPoints: c.totalPoints,
-        totalEnergyCost: c.totalEnergyCost,
-      })),
-      favoriteSkills: user.favoriteSkills.map(fs => ({
-        userSkill: fs.userSkill,
-        variantKey: fs.variantKey,
-      })),
-      favoriteCombos: user.favoriteCombos,
-    };
-
-    res.status(200).json({ success: true, user: userProfile });
-  } catch (error) {
-    console.error("Error en getProfileByUsername:", error);
+  } catch (err) {
     res.status(500).json({ success: false, message: "Error interno del servidor" });
   }
 };

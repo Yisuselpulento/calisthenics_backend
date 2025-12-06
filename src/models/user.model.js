@@ -171,4 +171,5 @@ UserSchema.methods.updateTier = function () {
   else this.ranking.tier = "Diamond";
 };
 
+
 export default mongoose.model("User", UserSchema);
