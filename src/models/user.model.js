@@ -20,16 +20,24 @@ const UserSchema = new Schema(
     },
 
     fullName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+        type: String,
+        required: true,
+        trim: true,
+        minlength: [3, "El nombre debe tener al menos 3 caracteres"],
+        maxlength: [20, "El nombre no puede exceder los 20 caracteres"],
+      },
 
     username: {
       type: String,
       unique: true,
       required: true,
       trim: true,
+      minlength: [3, "El username debe tener al menos 3 caracteres"],
+      maxlength: [15, "El username no puede exceder los 15 caracteres"],
+      match: [
+        /^[a-zA-Z0-9_]+$/,
+        "El username solo puede contener letras, números y guiones bajos (sin espacios)"
+      ],
     },
 
     gender: {

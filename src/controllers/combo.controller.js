@@ -273,6 +273,13 @@ export const deleteCombo = async (req, res) => {
       return res.status(403).json({ success: false, message: "No tienes permiso para eliminar este combo" });
     }
 
+    for (const el of combo.elements) {
+      await UserSkill.updateOne(
+        { _id: el.userSkill },
+        { $pull: { usedInCombos: comboId } }
+      );
+    }
+
     // Eliminar el combo
     await Combo.findByIdAndDelete(comboId);
 
@@ -283,6 +290,11 @@ export const deleteCombo = async (req, res) => {
         "favoriteCombos.static": combo.type === "static" ? comboId : undefined,
         "favoriteCombos.dynamic": combo.type === "dynamic" ? comboId : undefined
       }
+    });
+
+    await FeedEvent.deleteMany({
+      user: userId,
+      "metadata.comboId": comboId
     });
 
    const updatedUser = await UpdateFullUser(userId);

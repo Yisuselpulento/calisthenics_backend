@@ -4,6 +4,8 @@ import User from "../models/user.model.js";
 import Skill from "../models/skill.model.js";
 import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
+import Combo from "../models/combo.model.js";
+import { updateUserAuraStats } from "../utils/updateUserAuraStats.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
@@ -56,6 +58,9 @@ export const addSkillVariant = async (req, res) => {
       message: feedMessage,
       metadata: { skillId: skillId, variantKey, fingers: Number(fingers),  videoUrl: result.secure_url, },
     });
+
+    await updateUserAuraStats(userId);
+
 
     const fullUser = await UpdateFullUser(userId);
 
@@ -170,67 +175,91 @@ export const editSkillVariant = async (req, res) => {
 
 
 // -------------------- Eliminar Variante --------------------
+// -------------------- Eliminar Variante --------------------
 export const deleteSkillVariant = async (req, res) => {
   try {
     const { userSkillId, variantKey, fingers } = req.params;
-
     const userId = req.userId;
 
-    const userSkill = await UserSkill.findOne({
-      _id: userSkillId,
-      user: userId,
-    });
-
+    const userSkill = await UserSkill.findOne({ _id: userSkillId, user: userId });
     if (!userSkill) {
-      return res.status(404).json({
-        success: false,
-        message: "Skill no encontrada",
-      });
+      return res.status(404).json({ success: false, message: "Skill no encontrada" });
     }
 
     const variantIndex = userSkill.variants.findIndex(
-      (v) =>
-        v.variantKey === variantKey &&
-        v.fingers === Number(fingers)
+      v => v.variantKey === variantKey && v.fingers === Number(fingers)
     );
 
     if (variantIndex === -1) {
-      return res.status(404).json({
+      return res.status(404).json({ success: false, message: "Variante no encontrada" });
+    }
+
+    const variantUsed = await Combo.findOne({
+      user: userId,
+      "elements.userSkill": userSkillId,
+      "elements.variantKey": variantKey
+    });
+
+    if (variantUsed) {
+      return res.status(400).json({
         success: false,
-        message: "Variante no encontrada",
+        message: "No puedes eliminar esta variante porque está siendo utilizada en un combo. Elimínala primero del combo."
       });
     }
 
     const removedVariant = userSkill.variants[variantIndex];
 
-    // Eliminar video de Cloudinary si existe
     if (removedVariant.video) {
       await deleteFromCloudinary(removedVariant.video);
     }
 
-    // Remover de la lista
     userSkill.variants.splice(variantIndex, 1);
 
+    // ⛔ Si ya no quedan variantes, borramos todo el UserSkill
+    if (userSkill.variants.length === 0) {
+      await UserSkill.deleteOne({ _id: userSkill._id });
+
+      await User.findByIdAndUpdate(userId, {
+        $pull: { skills: userSkill._id, favoriteSkills: { userSkill: userSkill._id } }
+      });
+
+      await FeedEvent.deleteMany({
+        user: userId,
+        "metadata.skillId": userSkill.skill.toString()
+      });
+
+      await updateUserAuraStats(userId);
+
+      const fullUser = await UpdateFullUser(userId);
+
+      return res.json({
+        success: true,
+        message: "Skill eliminada por completo",
+        user: fullUser,
+      });
+    }
+
+    // Si quedan variantes, solo guardamos
     await userSkill.save();
 
     await FeedEvent.deleteMany({
       user: userId,
       "metadata.skillId": userSkill.skill.toString(),
       "metadata.variantKey": variantKey,
-      "metadata.fingers": Number(fingers)
+      "metadata.fingers": Number(fingers),
     });
 
     const fullUser = await UpdateFullUser(userId);
 
-      return res.json({
-        success: true,
-        message: "Variante eliminada correctamente",
-        user: fullUser,
-      });
+    return res.json({
+      success: true,
+      message: "Variante eliminada correctamente",
+      user: fullUser,
+    });
 
   } catch (err) {
     console.error("deleteSkillVariant:", err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error del servidor",
     });

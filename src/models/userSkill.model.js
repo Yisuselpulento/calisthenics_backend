@@ -15,6 +15,21 @@ const UserSkillVariantSchema = new Schema(
   { _id: false }
 );
 
+const UsedVariantSchema = new Schema(
+  {
+    combo: {
+      type: Schema.Types.ObjectId,
+      ref: "Combo",
+      required: true,
+    },
+    variantKey: {
+      type: String,
+      required: true,
+    }
+  },
+  { _id: false }
+);
+
 const UserSkillSchema = new Schema(
   {
     user: {
@@ -31,6 +46,10 @@ const UserSkillSchema = new Schema(
 
     variants: {
       type: [UserSkillVariantSchema],
+      default: [],
+    },
+    usedInCombos: {
+      type: [UsedVariantSchema],
       default: [],
     },
   },
