@@ -21,7 +21,10 @@ const ReportSchema = new Schema(
       required: true,
       refPath: "targetType", 
     },
-
+     variantInfo: {
+        variantKey: String,
+        fingers: Number,
+      }, 
     reason: {
       type: String,
       enum: [

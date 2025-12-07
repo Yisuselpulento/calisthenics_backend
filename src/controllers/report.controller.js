@@ -3,7 +3,7 @@ import Report from "../models/report.model.js";
 /* ---------------------- CREAR REPORTE ---------------------- */
 export const createReport = async (req, res) => {
   try {
-    const { targetType, target, reason, description } = req.body;
+    const { targetType, target, variantInfo, reason, description } = req.body;
 
     if (!targetType || !target || !reason) {
       return res.status(400).json({ success: false, message: "Faltan campos obligatorios." });
@@ -13,6 +13,7 @@ export const createReport = async (req, res) => {
       reporter: req.userId,
       targetType,
       target,
+      variantInfo: variantInfo || {}, 
       reason,
       description: description || "",
     });
@@ -25,6 +26,7 @@ export const createReport = async (req, res) => {
     res.status(500).json({ success: false, message: "Error al crear reporte." });
   }
 };
+
 
 /* ---------------------- OBTENER TODOS LOS REPORTES ---------------------- */
 export const getAllReports = async (req, res) => {
