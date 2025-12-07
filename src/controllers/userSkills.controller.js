@@ -80,32 +80,36 @@ export const editSkillVariant = async (req, res) => {
   try {
     const userId = req.userId;
     const { userSkillId, variantKey, fingers } = req.params; // actuales
-    const { newVariantKey, newFingers } = req.body; // nuevos
+    const { newFingers } = req.body; // nuevos fingers
 
+    // Buscar la skill del usuario
     const userSkill = await UserSkill.findOne({
       _id: userSkillId,
       user: userId,
     });
 
     if (!userSkill)
-      return res
-        .status(404)
-        .json({ success: false, message: "Skill no encontrada" });
+      return res.status(404).json({ success: false, message: "Skill no encontrada" });
 
+    // Buscar la variante específica
     const variantIndex = userSkill.variants.findIndex(
-      (v) =>
-        v.variantKey === variantKey && v.fingers === Number(fingers)
+      (v) => v.variantKey === variantKey && v.fingers === Number(fingers)
     );
 
     if (variantIndex === -1)
-      return res
-        .status(404)
-        .json({ success: false, message: "Variante no encontrada" });
+      return res.status(404).json({ success: false, message: "Variante no encontrada" });
 
     const variant = userSkill.variants[variantIndex];
 
-    // ----------- Validar newFingers -----------
+    // ----------- Validar y actualizar fingers -----------
     if (newFingers !== undefined) {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Al cambiar los fingers, debes subir un nuevo video",
+        });
+      }
+
       const nf = Number(newFingers);
       if (![1, 2, 5].includes(nf)) {
         return res.status(400).json({
@@ -114,11 +118,11 @@ export const editSkillVariant = async (req, res) => {
         });
       }
 
-      // Verificar que no exista otra variante con same newFingers + same variantKey
+      // Verificar que no exista otra variante con la misma combinación
       const exists = userSkill.variants.some(
         (v, i) =>
           i !== variantIndex &&
-          v.variantKey === (newVariantKey || variant.variantKey) &&
+          v.variantKey === variant.variantKey &&
           v.fingers === nf
       );
       if (exists) {
@@ -131,47 +135,32 @@ export const editSkillVariant = async (req, res) => {
       variant.fingers = nf;
     }
 
-    // ----------- Cambiar variantKey -----------
-    if (newVariantKey) {
-      const exists = userSkill.variants.some(
-        (v, i) =>
-          i !== variantIndex &&
-          v.variantKey === newVariantKey &&
-          v.fingers === (newFingers || variant.fingers)
-      );
-      if (exists) {
-        return res.status(400).json({
-          success: false,
-          message: "Ya existe una variante con esa combination variantKey + fingers",
-        });
-      }
-
-      variant.variantKey = newVariantKey;
-    }
-
-    // ----------- Reemplazar video -----------
+    // ----------- Reemplazar video si se sube uno nuevo -----------
     if (req.file) {
       if (variant.video) await deleteFromCloudinary(variant.video);
-      const result = await uploadToCloudinary(
-        req.file,
-        "user_skill_videos",
-        "video"
-      );
+      const result = await uploadToCloudinary(req.file, "user_skill_videos", "video");
       variant.video = result.secure_url;
     }
 
+    // Guardar cambios en la skill
     await userSkill.save();
 
-    res.json({
+    // Obtener el usuario completo actualizado
+    const fullUser = await UpdateFullUser(userId);
+
+    return res.json({
       success: true,
       message: "Variante actualizada correctamente",
-      userSkill,
+      user: fullUser,
     });
+
   } catch (err) {
     console.error("editSkillVariant:", err);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
+
+
 
 
 // -------------------- Eliminar Variante --------------------
@@ -411,3 +400,74 @@ export const getFavoriteSkills = async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
+
+// -------------------- Obtener skill específica del usuario --------------------
+export const getUserSkillVariantById = async (req, res) => {
+  try {
+    const { userSkillId, variantKey, fingers } = req.params;
+
+    if (!userSkillId || !variantKey || !fingers) {
+      return res.status(400).json({
+        success: false,
+        message: "Debe proporcionar userSkillId, variantKey y fingers",
+      });
+    }
+
+    // 🔹 Buscar UserSkill con Skill poblado
+    const userSkill = await UserSkill.findById(userSkillId)
+      .populate("skill")
+      .lean();
+
+    if (!userSkill) {
+      return res.status(404).json({
+        success: false,
+        message: "Skill no encontrada",
+      });
+    }
+
+    // 🔹 Buscar la variante en UserSkill
+    const userVariant = userSkill.variants.find(
+      (v) => v.variantKey === variantKey && v.fingers === Number(fingers)
+    );
+
+    if (!userVariant) {
+      return res.status(404).json({
+        success: false,
+        message: "Variante no encontrada",
+      });
+    }
+
+    // 🔹 Buscar la variante en Skill para traer stats y demás info
+    const skillVariant = userSkill.skill.variants.find(
+      (v) => v.variantKey === variantKey
+    );
+
+    // 🔹 Preparar la info completa
+    const variantData = {
+      userSkillId: userSkill._id,
+      skillId: userSkill.skill._id,
+      skillName: userSkill.skill.name,
+      skillKey: userSkill.skill.skillKey,
+      skillDifficulty: userSkill.skill.difficulty,
+      variantKey: userVariant.variantKey,
+      fingers: userVariant.fingers,
+      name: skillVariant?.name || userVariant.variantKey,
+      type: skillVariant?.type || "static",
+      staticAU: skillVariant?.staticAu || 0,
+      dynamicAU: skillVariant?.dynamicAu || 0,
+      stats: skillVariant?.stats || {},
+      video: userVariant.video || null,
+      usedInCombos: userSkill.usedInCombos || [],
+    };
+
+    return res.json({ success: true, variant: variantData });
+  } catch (err) {
+    console.error("getUserSkillVariantById:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Error del servidor",
+    });
+  }
+};
+
+

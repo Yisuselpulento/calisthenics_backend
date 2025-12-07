@@ -7,7 +7,8 @@ import {
   deleteSkillVariant,
   getUserSkills, 
   toggleFavoriteSkill,
-  getFavoriteSkills
+  getFavoriteSkills,
+  getUserSkillVariantById
 } from "../controllers/userSkills.controller.js";
 
 const router = express.Router();
@@ -32,5 +33,6 @@ router.get("/", verifyAuth, getUserSkills);
 
 router.post("/favorites/:userSkillId/:variantKey", verifyAuth, toggleFavoriteSkill);
 router.get("/favorites", verifyAuth, getFavoriteSkills);
+router.get("/skill/:userSkillId/:variantKey/:fingers", verifyAuth, getUserSkillVariantById);
 
 export default router;
