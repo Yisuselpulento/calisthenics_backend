@@ -217,7 +217,7 @@ export const deleteSkillVariant = async (req, res) => {
 
     userSkill.variants.splice(variantIndex, 1);
 
-    // ⛔ Si ya no quedan variantes, borramos todo el UserSkill
+    // ⚠️ Si ya no quedan variantes, borrar todo el UserSkill
     if (userSkill.variants.length === 0) {
       await UserSkill.deleteOne({ _id: userSkill._id });
 
@@ -230,6 +230,7 @@ export const deleteSkillVariant = async (req, res) => {
         "metadata.skillId": userSkill.skill.toString()
       });
 
+      // 🔥 Recalcular stats si se elimina la skill completa
       await getUserStats(userId);
 
       const fullUser = await UpdateFullUser(userId);
@@ -241,8 +242,9 @@ export const deleteSkillVariant = async (req, res) => {
       });
     }
 
-    // Si quedan variantes, solo guardamos
+    // Si quedan variantes: guardar y actualizar stats
     await userSkill.save();
+    await getUserStats(userId);
 
     await FeedEvent.deleteMany({
       user: userId,
@@ -252,9 +254,9 @@ export const deleteSkillVariant = async (req, res) => {
     });
 
     await Combo.updateMany(
-  { user: userId },
-  { $pull: { elements: { userSkill: userSkill._id, variantKey, fingers: Number(fingers) } } }
-);
+      { user: userId },
+      { $pull: { elements: { userSkill: userSkill._id, variantKey, fingers: Number(fingers) } } }
+    );
 
     const fullUser = await UpdateFullUser(userId);
 

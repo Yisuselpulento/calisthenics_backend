@@ -9,24 +9,6 @@ export const getUserStats = async (userId) => {
 
   if (!user) return null;
 
-  // Revisar si hay alguna variante más reciente que stats.lastUpdated
-  let needsRecalc = false;
-  for (const userSkill of user.skills) {
-    for (const variant of userSkill.variants) {
-      if (variant.lastUpdated > user.stats.lastUpdated) {
-        needsRecalc = true;
-        break;
-      }
-    }
-    if (needsRecalc) break;
-  }
-
-  if (!needsRecalc) {
-    // ✅ Retornamos stats cacheadas
-    return user.stats;
-  }
-
-  // 🔹 Recalcular stats
   let staticAura = 0, dynamicAura = 0, energy = 0;
 
   for (const userSkill of user.skills) {
@@ -43,7 +25,6 @@ export const getUserStats = async (userId) => {
     }
   }
 
-  // Guardar stats recalculadas + timestamp
   user.stats.staticAura = staticAura;
   user.stats.dynamicAura = dynamicAura;
   user.stats.mainAura = staticAura + dynamicAura;
