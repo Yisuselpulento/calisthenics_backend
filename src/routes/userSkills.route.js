@@ -31,7 +31,7 @@ router.delete("/delete/:userSkillId/:variantKey/:fingers", verifyAuth, deleteSki
 
 router.get("/", verifyAuth, getUserSkills);
 
-router.post("/favorites/:userSkillId/:variantKey", verifyAuth, toggleFavoriteSkill);
+router.post("/favorites/:userSkillId/:variantKey/:fingers", verifyAuth, toggleFavoriteSkill);
 router.get("/favorites", verifyAuth, getFavoriteSkills);
 router.get("/skill/:userSkillId/:variantKey/:fingers", verifyAuth, getUserSkillVariantById);
 

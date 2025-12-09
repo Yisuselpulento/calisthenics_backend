@@ -109,7 +109,7 @@ export const UpdateFullUser = async (userId) => {
     favoriteCombos: user.favoriteCombos,
 
     /* ------ SKILLS CON VARIANTS MEZCLADAS ------ */
-    skills: user.skills.map((us) => {
+    skills: user.skills.slice().reverse().map((us) => {
       const variants = us.variants.map((uv) => {
         const skillVariant = us.skill.variants.find(
           (v) => v.variantKey === uv.variantKey
@@ -122,6 +122,7 @@ export const UpdateFullUser = async (userId) => {
           stats: skillVariant?.stats || {},
           staticAU: skillVariant?.staticAu || 0,
           dynamicAU: skillVariant?.dynamicAu || 0,
+          progressionLevel: skillVariant?.progressionLevel || 1,
         };
       });
 

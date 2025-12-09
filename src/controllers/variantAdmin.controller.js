@@ -4,7 +4,7 @@ import Skill from "../models/skill.model.js";
 export const addVariant = async (req, res) => {
   try {
     const { skillKey } = req.params;
-    const { name, variantKey, type, difficulty, stats, staticAu, dynamicAu } = req.body;
+    const { name, variantKey, type, difficulty, stats, staticAu, dynamicAu, progressionLevel  } = req.body;
 
     const skill = await Skill.findOne({ skillKey });
 
@@ -13,11 +13,11 @@ export const addVariant = async (req, res) => {
     }
 
     // validaciones
-    if (!name || !variantKey || !type) {
-      return res.status(400).json({ message: "name, variantKey y type son requeridos." });
+    if (!name || !variantKey || !type || progressionLevel === undefined) {
+      return res.status(400).json({ message: "name, variantKey, type y progressionLevel son requeridos." });
     }
 
-    const allowedTypes = ["static", "dynamic"];
+    const allowedTypes = ["static", "dynamic", "basic"];
     if (!allowedTypes.includes(type)) {
       return res.status(400).json({ message: "type inválido." });
     }
@@ -34,6 +34,10 @@ export const addVariant = async (req, res) => {
       return res.status(400).json({ message: "difficulty de variante inválido." });
     }
 
+    if (progressionLevel < 1 || progressionLevel > 4) {
+      return res.status(400).json({ message: "progressionLevel debe estar entre 1 y 4." });
+    }
+
     const exists = skill.variants.find(v => v.variantKey === variantKey);
     if (exists) {
       return res.status(400).json({ message: "variantKey ya existe en esta skill." });
@@ -46,13 +50,15 @@ export const addVariant = async (req, res) => {
       difficulty,
       staticAu: staticAu ?? 0,
       dynamicAu: dynamicAu ?? 0,
-      stats: stats ?? {}
+      stats: stats ?? {},
+      progressionLevel
     });
 
     await skill.save();
 
     res.status(201).json(skill);
   } catch (error) {
+     console.error("Error creando variante:", error); 
     res.status(500).json({ message: "Error creando variante." });
   }
 };
@@ -68,9 +74,9 @@ export const updateVariant = async (req, res) => {
     const variant = skill.variants.find(v => v.variantKey === variantKey);
     if (!variant) return res.status(404).json({ message: "Variante no encontrada." });
 
-    const { name, type, difficulty, stats, staticAu, dynamicAu } = req.body;
+    const { name, type, difficulty, stats, staticAu, dynamicAu, progressionLevel  } = req.body;
 
-    const allowedTypes = ["static", "dynamic"];
+    const allowedTypes = ["static", "dynamic", "basic"];
     if (type && !allowedTypes.includes(type)) {
       return res.status(400).json({ message: "type inválido." });
     }
@@ -83,6 +89,10 @@ export const updateVariant = async (req, res) => {
       "legendary"
     ];
 
+    if (progressionLevel < 1 || progressionLevel > 4) {
+      return res.status(400).json({ message: "progressionLevel debe estar entre 1 y 4." });
+    }
+
     if (difficulty && !allowedVariantDifficulties.includes(difficulty)) {
       return res.status(400).json({ message: "difficulty inválido." });
     }
@@ -93,11 +103,13 @@ export const updateVariant = async (req, res) => {
     if (stats) variant.stats = stats;
     if (staticAu !== undefined) variant.staticAu = staticAu;
     if (dynamicAu !== undefined) variant.dynamicAu = dynamicAu;
+    if (progressionLevel !== undefined) variant.progressionLevel = progressionLevel;
 
     await skill.save();
 
     res.json(skill);
   } catch (error) {
+     console.error("Error actualizando variante:", error); 
     res.status(500).json({ message: "Error actualizando variante." });
   }
 };
@@ -121,6 +133,7 @@ export const deleteVariant = async (req, res) => {
 
     res.json({ message: "Variante eliminada correctamente." });
   } catch (error) {
+      console.error("Error eliminando variante:", error); 
     res.status(500).json({ message: "Error eliminando variante." });
   }
 };
@@ -134,6 +147,7 @@ export const getAllVariants = async (req, res) => {
 
     res.json(skill.variants);
   } catch (error) {
+     console.error("Error obteniendo variantes:", error); 
     res.status(500).json({ message: "Error obteniendo variantes." });
   }
 };
@@ -151,6 +165,7 @@ export const getVariantByKey = async (req, res) => {
 
     res.json(variant);
   } catch (error) {
+     console.error("Error obteniendo variante:", error); 
     res.status(500).json({ message: "Error obteniendo variante." });
   }
 };

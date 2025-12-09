@@ -12,7 +12,7 @@ const VariantSchema = new Schema(
 
     type: {
       type: String,
-      enum: ["static", "dynamic"],
+      enum: ["static", "dynamic", "basic"],
       required: true,
     },
 
@@ -31,6 +31,12 @@ const VariantSchema = new Schema(
       enum: ["basic", "intermediate", "advanced", "elite", "legendary"],
       default: "basic",
       trim: true,
+    },
+    progressionLevel: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 4,
     },
   },
   { timestamps: true }
