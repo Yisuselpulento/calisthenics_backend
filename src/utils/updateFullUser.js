@@ -63,6 +63,7 @@ export const UpdateFullUser = async (userId) => {
         staticAU: skillVariant?.staticAu || 0,
         dynamicAU: skillVariant?.dynamicAu || 0,
         progressionLevel: skillVariant?.progressionLevel || 1,
+        difficulty: skillVariant?.difficulty || "basic",
       };
     }),
   }));
