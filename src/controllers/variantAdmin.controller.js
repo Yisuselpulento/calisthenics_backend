@@ -1,5 +1,6 @@
 import Skill from "../models/skill.model.js";
-
+import UserSkill from "../models/userSkill.model.js";
+import { recalculateUserStats } from "../utils/statsService.js";
 
 export const addVariant = async (req, res) => {
   try {
@@ -81,6 +82,26 @@ export const updateVariant = async (req, res) => {
       return res.status(400).json({ message: "type inválido." });
     }
 
+    const allowedStatFields = [
+        "pointsPerSecond",
+        "energyPerSecond",
+        "pointsPerRep",
+        "energyPerRep",
+        "staticAu",
+        "dynamicAu"
+      ];
+
+      if (stats) {
+        Object.keys(stats).forEach(key => {
+          if (!allowedStatFields.includes(key)) {
+            return res.status(400).json({
+              message: `Campo de stats no permitido: ${key}`
+            });
+          }
+        });
+        Object.assign(variant.stats, stats);
+      }
+
     const allowedVariantDifficulties = [
       "basic",
       "intermediate",
@@ -89,9 +110,12 @@ export const updateVariant = async (req, res) => {
       "legendary"
     ];
 
-    if (progressionLevel < 1 || progressionLevel > 4) {
-      return res.status(400).json({ message: "progressionLevel debe estar entre 1 y 4." });
-    }
+    if (progressionLevel !== undefined) {
+        if (progressionLevel < 1 || progressionLevel > 4) {
+          return res.status(400).json({ message: "progressionLevel debe estar entre 1 y 4." });
+        }
+        variant.progressionLevel = progressionLevel;
+      }
 
     if (difficulty && !allowedVariantDifficulties.includes(difficulty)) {
       return res.status(400).json({ message: "difficulty inválido." });
@@ -100,12 +124,20 @@ export const updateVariant = async (req, res) => {
     if (name) variant.name = name;
     if (type) variant.type = type;
     if (difficulty) variant.difficulty = difficulty;
-    if (stats) variant.stats = stats;
+    if (stats) {
+  Object.assign(variant.stats, stats);
+}
     if (staticAu !== undefined) variant.staticAu = staticAu;
     if (dynamicAu !== undefined) variant.dynamicAu = dynamicAu;
-    if (progressionLevel !== undefined) variant.progressionLevel = progressionLevel;
+
+    variant.lastStatChange = new Date();
 
     await skill.save();
+
+    const userSkills = await UserSkill.find({ skill: skill._id });
+    for (const us of userSkills) {
+      await recalculateUserStats(us.user);
+    }
 
     res.json(skill);
   } catch (error) {
@@ -130,6 +162,15 @@ export const deleteVariant = async (req, res) => {
 
     skill.variants = newVariants;
     await skill.save();
+
+    const userSkills = await UserSkill.find({ 
+  skill: skill._id,
+  "variants.variantKey": variantKey 
+});
+
+for (const us of userSkills) {
+  await recalculateUserStats(us.user);
+}
 
     res.json({ message: "Variante eliminada correctamente." });
   } catch (error) {

@@ -38,6 +38,7 @@ const VariantSchema = new Schema(
       min: 1,
       max: 4,
     },
+    lastStatChange: { type: Date, default: new Date(0) },
   },
   { timestamps: true }
 );

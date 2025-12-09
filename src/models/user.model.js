@@ -89,6 +89,7 @@ videoProfile: { type: String, default: "" },
       staticAura: { type: Number, default: 0 },
       dynamicAura: { type: Number, default: 0 },
       energy: { type: Number, default: 1000 },
+      lastUpdated: { type: Date, default: new Date(0) }
     },
 
     /* ---------------------- RELACIONES ---------------------- */

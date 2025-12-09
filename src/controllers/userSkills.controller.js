@@ -5,8 +5,8 @@ import Skill from "../models/skill.model.js";
 import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 import Combo from "../models/combo.model.js";
-import { updateUserAuraStats } from "../utils/updateUserAuraStats.js";
 import { validateVariantProgression } from "../utils/variantValidation.js";
+import { getUserStats } from "../utils/getUserStats.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
@@ -51,7 +51,8 @@ export const addSkillVariant = async (req, res) => {
         userSkill.variants.push({
           variantKey,
           fingers: Number(fingers),
-          video: result.secure_url
+          video: result.secure_url,
+          lastUpdated: new Date()
         });
 
         await userSkill.save(); 
@@ -81,7 +82,7 @@ export const addSkillVariant = async (req, res) => {
       }
     });
 
-    await updateUserAuraStats(userId);
+    await getUserStats(userId);
 
     const fullUser = await UpdateFullUser(userId);
 
@@ -229,7 +230,7 @@ export const deleteSkillVariant = async (req, res) => {
         "metadata.skillId": userSkill.skill.toString()
       });
 
-      await updateUserAuraStats(userId);
+      await getUserStats(userId);
 
       const fullUser = await UpdateFullUser(userId);
 
