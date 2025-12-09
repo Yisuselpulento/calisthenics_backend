@@ -8,74 +8,64 @@ import Notification from "../models/notification.model.js";
 
 export const UpdateFullUser = async (userId) => {
   const user = await User.findById(userId)
-
-    /* --------- SKILLS --------- */
     .populate({
       path: "skills",
-      populate: {
-        path: "skill",
-        model: "Skill",
-      },
+      populate: { path: "skill", model: "Skill" },
     })
-
-    /* --------- COMBOS --------- */
-    .populate({
-      path: "combos",
-      populate: [
-        { path: "elements.userSkill", model: "UserSkill" },
-        { path: "elements.skill", model: "Skill" },
-      ],
-    })
-
-    /* --------- MATCHES --------- */
-    .populate({
-      path: "match",
-      populate: [
-        { path: "players", select: "username fullName avatar" },
-        { path: "winner", select: "username fullName avatar" },
-        { path: "loser", select: "username fullName avatar" },
-        { path: "comboUsed" },
-      ],
-    })
-
-    /* --------- TEAMS --------- */
-    .populate({
-      path: "teams",
-      populate: {
-        path: "members",
-        select: "username fullName avatar",
-      },
-    })
-
-    /* --------- FOLLOWERS/FOLLOWING --------- */
-    .populate("followers", "username fullName avatar")
-    .populate("following", "username fullName avatar")
-
-    /* --------- FAVORITE SKILLS --------- */
     .populate({
       path: "favoriteSkills.userSkill",
-      populate: {
-        path: "skill",
-        model: "Skill",
-      },
+      populate: { path: "skill", model: "Skill" },
     })
-
-    /* --------- NOTIFICATIONS COMPLETAS --------- */
-    .populate({
-      path: "notifications",
-      populate: [
-        { path: "fromUser", select: "username fullName avatar" },
-        { path: "relatedSkill", select: "name skillKey" },
-        { path: "relatedCombo", select: "name type totalPoints" },
-        { path: "relatedTeam", select: "name avatar" },
-      ],
-    });
+    .populate("combos")
+    .populate("followers", "username fullName avatar")
+    .populate("following", "username fullName avatar")
+    .populate("teams")
+    .populate("match")
+    .populate("notifications");
 
   if (!user) return null;
 
-  /* =======================================================
-     RECONSTRUCCIÓN MANUAL → ENTREGA TODO LISTO PARA EL FRONT
-     ======================================================= */
+  // Reconstrucción de favoritos incluyendo fingers
+  const favoriteSkills = user.favoriteSkills
+    .map((fs) => {
+      if (!fs.userSkill) return null;
+
+      const variant = fs.userSkill.variants.find(
+        (v) => v.variantKey === fs.variantKey && v.fingers === fs.fingers
+      );
+
+      if (!variant) return null;
+
+      return {
+        _id: fs._id,
+        userSkill: fs.userSkill._id,
+        skill: fs.userSkill.skill,
+        variantKey: variant.variantKey,
+        fingers: variant.fingers,
+        video: variant.video,
+        name: fs.userSkill.skill.variants.find(v => v.variantKey === variant.variantKey)?.name || variant.variantKey,
+        type: fs.userSkill.skill.variants.find(v => v.variantKey === variant.variantKey)?.type || "static",
+      };
+    })
+    .filter(Boolean);
+
+  // Reconstrucción de skills con variantes
+  const skills = user.skills.map((us) => ({
+    _id: us._id,
+    skill: us.skill,
+    variants: us.variants.map((uv) => {
+      const skillVariant = us.skill.variants.find(v => v.variantKey === uv.variantKey);
+      return {
+        ...uv.toObject(),
+        name: skillVariant?.name || uv.variantKey,
+        type: skillVariant?.type || "static",
+        stats: skillVariant?.stats || {},
+        staticAU: skillVariant?.staticAu || 0,
+        dynamicAU: skillVariant?.dynamicAu || 0,
+        progressionLevel: skillVariant?.progressionLevel || 1,
+      };
+    }),
+  }));
 
   return {
     _id: user._id,
@@ -91,59 +81,15 @@ export const UpdateFullUser = async (userId) => {
     videoProfile: user.videoProfile,
     stats: user.stats,
     ranking: user.ranking,
-
     followers: user.followers,
     following: user.following,
-
     teams: user.teams,
-
-    /* ------ NOTIFICACIONES ------ */
     notifications: user.notifications,
     notificationsCount: user.notificationsCount,
-
-    /* ------ FAVORITOS ------ */
-    favoriteSkills: user.favoriteSkills.map((fs) => ({
-      userSkill: fs.userSkill,
-      variantKey: fs.variantKey,
-    })),
+    favoriteSkills,
     favoriteCombos: user.favoriteCombos,
-
-    /* ------ SKILLS CON VARIANTS MEZCLADAS ------ */
-    skills: user.skills.slice().reverse().map((us) => {
-      const variants = us.variants.map((uv) => {
-        const skillVariant = us.skill.variants.find(
-          (v) => v.variantKey === uv.variantKey
-        );
-
-        return {
-          ...uv.toObject(),
-          name: skillVariant?.name || uv.variantKey,
-          type: skillVariant?.type || "static",
-          stats: skillVariant?.stats || {},
-          staticAU: skillVariant?.staticAu || 0,
-          dynamicAU: skillVariant?.dynamicAu || 0,
-          progressionLevel: skillVariant?.progressionLevel || 1,
-        };
-      });
-
-      return {
-        _id: us._id,
-        skill: us.skill,
-        variants,
-      };
-    }),
-
-    /* ------ COMBOS ------ */
-    combos: user.combos.map((c) => ({
-      _id: c._id,
-      name: c.name,
-      type: c.type,
-      elements: c.elements,
-      totalPoints: c.totalPoints,
-      totalEnergyCost: c.totalEnergyCost,
-    })),
-
-    /* ------ MATCHES ------ */
+    skills,
+    combos: user.combos,
     match: user.match,
   };
 };
