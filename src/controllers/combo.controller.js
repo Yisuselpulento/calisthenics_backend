@@ -276,7 +276,6 @@ export const getUserCombos = async (req, res) => {
 export const getComboById = async (req, res) => {
   try {
     const { comboId } = req.params;
-    const userId = req.userId;
 
     if (!comboId) {
       return res.status(400).json({
@@ -291,13 +290,6 @@ export const getComboById = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Combo no encontrado"
-      });
-    }
-
-    if (String(combo.user) !== String(userId)) {
-      return res.status(403).json({
-        success: false,
-        message: "No tienes permiso para ver este combo"
       });
     }
 
@@ -322,14 +314,16 @@ export const getComboById = async (req, res) => {
 
       return {
         userSkill: el.userSkill,
+        skillName: userSkill.skill.name,                    
         variantKey: el.variantKey,
+        variantName: baseVariant.name, 
         hold: el.hold,
         video: userVariant?.video || null,
         fingers: userVariant?.fingers || null,
-        pointsPerSecond: baseVariant.stats.pointsPerSecond,
-        pointsPerRep: baseVariant.stats.pointsPerRep,
-        staticAu: baseVariant.staticAu,
-        dynamicAu: baseVariant.dynamicAu,
+        pointsPerSecond: baseVariant.stats?.pointsPerSecond || 0,
+        pointsPerRep: baseVariant.stats?.pointsPerRep || 0,
+        staticAu: baseVariant.staticAu || 0,
+        dynamicAu: baseVariant.dynamicAu || 0,
       };
     }).filter(Boolean); // eliminar elementos nulos
 
@@ -340,11 +334,13 @@ export const getComboById = async (req, res) => {
         _id: combo._id,
         name: combo.name,
         type: combo.type,
+        video: combo.video,
         totalEnergyCost: combo.totalEnergyCost,
         totalPoints: combo.totalPoints,
         createdAt: combo.createdAt,
         updatedAt: combo.updatedAt,
-        elements: detailedElements
+        elements: detailedElements,
+        owner: combo.user, // enviamos dueño para el frontend
       }
     });
 
@@ -356,7 +352,6 @@ export const getComboById = async (req, res) => {
     });
   }
 };
-
 
 /* ---------------------------- UPDATE ---------------------------- */
 
