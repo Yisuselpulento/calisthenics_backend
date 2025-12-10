@@ -22,8 +22,8 @@ const UsedVariantSchema = new Schema(
       ref: "Combo",
       required: true,
     },
-    variantKey: {
-      type: String,
+      userSkillVariantId: {   
+      type: Schema.Types.ObjectId,
       required: true,
     }
   },

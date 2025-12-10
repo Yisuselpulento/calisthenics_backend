@@ -6,11 +6,12 @@ import { calculateEnergyCost } from "../utils/calculateEnergyCost.js";
 import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
+import mongoose from "mongoose";
+
 
 /* ---------------------------- CREATE ---------------------------- */
 
 export const createCombo = async (req, res) => {
-  console.log(req.body);
   let uploadResult = null;
 
   try {
@@ -19,10 +20,7 @@ export const createCombo = async (req, res) => {
 
     // Validaciones básicas
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Debes subir un video para tu combo."
-      });
+      return res.status(400).json({ success: false, message: "Debes subir un video para tu combo." });
     }
 
     if (!["static", "dynamic"].includes(type)) {
@@ -32,13 +30,10 @@ export const createCombo = async (req, res) => {
     const parsedElements = JSON.parse(elements);
 
     if (parsedElements.length < 3 || parsedElements.length > 10) {
-      return res.status(400).json({
-        success: false,
-        message: "Un combo debe tener entre 3 y 10 variantes."
-      });
+      return res.status(400).json({ success: false, message: "Un combo debe tener entre 3 y 10 variantes." });
     }
 
-    // Traer el usuario con sus skills
+    // Traer usuario con skills
     const user = await User.findById(userId)
       .populate({
         path: "skills",
@@ -49,46 +44,54 @@ export const createCombo = async (req, res) => {
 
     let totalEnergyCost = 0;
 
-    // Validar cada variante y calcular energía
+    // Validar cada variante usando userSkillVariantId
     const comboElements = parsedElements.map(el => {
-      const userSkill = user.skills.find(s => String(s._id) === String(el.userSkill));
-      if (!userSkill) throw new Error("Ese skill no te pertenece");
+      const userSkillVariantId = el.userSkillVariantId;
 
-      const skill = userSkill.skill;
-      const variant = skill.variants.find(v => v.variantKey === el.variantKey);
-      if (!variant) throw new Error(`Variante ${el.variantKey} no existe en skill ${skill.name}`);
+      let foundVariant = null;
+      let foundUserSkill = null;
 
-      // Validar tipo de variante según tipo de combo
-      if (type === "static" && !["static", "basic"].includes(variant.type)) {
-        throw new Error(`No puedes usar variantes dinámicas en un combo estático.`);
+      for (const s of user.skills) {
+        const uv = s.variants.find(v => String(v._id) === String(userSkillVariantId));
+        if (uv) {
+          foundVariant = uv;
+          foundUserSkill = s;
+          break;
+        }
       }
 
-      if (type === "dynamic" && !["dynamic", "basic"].includes(variant.type)) {
+      if (!foundVariant || !foundUserSkill) throw new Error("Variante no encontrada");
+
+      // Buscar stats de la variante en la skill base
+      const skillVariant = foundUserSkill.skill.variants.find(v => v.variantKey === foundVariant.variantKey);
+      if (!skillVariant) throw new Error("Stats de la variante no encontradas");
+
+      // Validar tipo de variante según tipo de combo
+      if (type === "static" && !["static", "basic"].includes(skillVariant.type)) {
+        throw new Error(`No puedes usar variantes dinámicas en un combo estático.`);
+      }
+      if (type === "dynamic" && !["dynamic", "basic"].includes(skillVariant.type)) {
         throw new Error(`No puedes usar variantes estáticas en un combo dinámico.`);
       }
 
       // Validar hold/reps
-      const usesHold = variant.stats.energyPerSecond > 0;
+      const usesHold = skillVariant.stats.energyPerSecond > 0;
       const hold = el.hold ?? 0;
       const reps = el.reps ?? 0;
 
-      if (usesHold && hold < 1) {
-        throw new Error(`Variante ${variant.name} requiere hold en segundos.`);
-      }
+      if (usesHold && hold < 1) throw new Error(`Variante ${skillVariant.name} requiere hold en segundos.`);
+      if (!usesHold && reps < 1) throw new Error(`Variante ${skillVariant.name} requiere reps.`);
 
-      if (!usesHold && reps < 1) {
-        throw new Error(`Variante ${variant.name} requiere reps.`);
-      }
-
-      // Calcular energía usada por esta variante
-      const energyUsed = usesHold ? hold * variant.stats.energyPerSecond : reps * variant.stats.energyPerRep;
+      // Calcular energía
+      const energyUsed = usesHold ? hold * skillVariant.stats.energyPerSecond : reps * skillVariant.stats.energyPerRep;
       totalEnergyCost += energyUsed;
 
       return {
-        userSkill: userSkill._id,
-        skill: skill._id,
-        variantKey: variant.variantKey,
-        variantData: variant,
+        userSkill: foundUserSkill._id,
+        skill: foundUserSkill.skill._id,
+        userSkillVariantId: foundVariant._id,
+        variantKey: foundVariant.variantKey,
+        variantData: skillVariant,
         hold: usesHold ? hold : 0,
         reps: usesHold ? 0 : reps
       };
@@ -97,10 +100,7 @@ export const createCombo = async (req, res) => {
     // Validar energía total según tipo de combo
     const userEnergy = type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
     if (totalEnergyCost > userEnergy) {
-      return res.status(400).json({
-        success: false,
-        message: "No tienes suficiente energía para crear este combo."
-      });
+      return res.status(400).json({ success: false, message: "No tienes suficiente energía para crear este combo." });
     }
 
     // Subir video
@@ -116,27 +116,29 @@ export const createCombo = async (req, res) => {
       totalEnergyCost
     });
 
+    // Actualizar usedInCombos de cada userSkill
     for (const el of parsedElements) {
-  const userSkill = user.skills.find(s => String(s._id) === String(el.userSkill));
-  if (!userSkill) continue;
+      const userSkill = user.skills.find(s => s.variants.some(v => String(v._id) === String(el.userSkillVariantId)));
+      if (!userSkill) continue;
 
-  const alreadyUsed = userSkill.usedInCombos.some(
-    u => String(u.combo) === String(combo._id) && u.variantKey === el.variantKey
-  );
+      const alreadyUsed = userSkill.usedInCombos.some(
+        u => String(u.combo) === String(combo._id) && String(u.variantKey) === String(el.variantKey)
+      );
 
-  if (!alreadyUsed) {
-    userSkill.usedInCombos.push({
-      combo: combo._id,
-      variantKey: el.variantKey
-    });
-    await userSkill.save();
-  }
-}
+      if (!alreadyUsed) {
+        userSkill.usedInCombos.push({
+          combo: combo._id,
+          userSkillVariantId: el.userSkillVariantId
+        });
+        await userSkill.save();
+      }
+    }
 
+    // Guardar combo en usuario
     user.combos.push(combo._id);
     await user.save();
 
-    // Feed event
+    // Crear evento de feed
     await FeedEvent.create({
       user: userId,
       type: "NEW_COMBO",
@@ -144,6 +146,7 @@ export const createCombo = async (req, res) => {
       metadata: { comboId: combo._id, type }
     });
 
+    // Actualizar usuario completo para frontend
     const updatedUser = await UpdateFullUser(userId);
 
     return res.status(201).json({
@@ -154,14 +157,8 @@ export const createCombo = async (req, res) => {
     });
 
   } catch (err) {
-    if (uploadResult?.secure_url) {
-      await deleteFromCloudinary(uploadResult.secure_url);
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Error del servidor"
-    });
+    if (uploadResult?.secure_url) await deleteFromCloudinary(uploadResult.secure_url);
+    return res.status(500).json({ success: false, message: err.message || "Error del servidor" });
   }
 };
 
@@ -185,19 +182,14 @@ export const deleteCombo = async (req, res) => {
       return res.status(403).json({ success: false, message: "No tienes permiso para eliminar este combo" });
     }
 
-    // 1️⃣ Eliminar referencias del combo en los UserSkill y detectar huérfanos
-
-      for (const el of combo.elements) {
-      await UserSkill.findByIdAndUpdate(
-        el.userSkill,
-        { $pull: { usedInCombos: { combo: combo._id } } }, // solo quita la referencia
-        { new: true }
-      );
-    }
-
     if (combo.video) {
   await deleteFromCloudinary(combo.video);
-}
+
+      await UserSkill.updateMany(
+          { "usedInCombos.combo": comboId },
+          { $pull: { usedInCombos: { combo: comboId } } }
+        );
+    }
 
     // 4️⃣ Eliminar el Combo
     await Combo.findByIdAndDelete(comboId);

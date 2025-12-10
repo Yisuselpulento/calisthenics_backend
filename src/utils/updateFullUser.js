@@ -58,14 +58,23 @@ export const UpdateFullUser = async (userId) => {
   const skills = user.skills.map((us) => ({
     userSkillId: us._id,      
     skillId: us.skill._id,     // ID de la Skill base
-    skillName: us.skill.name,  // Nombre de la Skill
-    variants: us.variants.map((uv) => ({
-      userSkillVariantId: uv._id, // ID de la variante del usuario
-      variantKey: uv.variantKey,
-      fingers: uv.fingers,
-      video: uv.video,
-      lastUpdated: uv.lastUpdated,
-    })),
+    skillName: us.skill.name, 
+    variants: us.variants.map((uv) => {
+  const skillVariant = us.skill.variants.find(v => v.variantKey === uv.variantKey);
+        return {
+          userSkillVariantId: uv._id,
+          variantKey: uv.variantKey,
+          fingers: uv.fingers,
+          video: uv.video,
+          lastUpdated: uv.lastUpdated,
+          stats: skillVariant?.stats || { pointsPerSecond: 0, energyPerSecond: 0, pointsPerRep: 0, energyPerRep: 0 },
+          name: skillVariant?.name || uv.variantKey,
+          type: skillVariant?.type || "static",
+          staticAU: skillVariant?.staticAu || 0,
+          dynamicAU: skillVariant?.dynamicAu || 0,
+          difficulty: skillVariant?.difficulty || "basic"
+        };
+      })
   }));
 
   return {
