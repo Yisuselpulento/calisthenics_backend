@@ -17,9 +17,14 @@ const ComboElementSchema = new Schema(
       required: true,
     },
 
-    variantKey: {
+    userSkillVariantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true
+    },
+    
+    variantKey: {  
       type: String,
-      required: true,
+      required: true
     },
 
     variantData: { type: Schema.Types.Mixed, required: true },

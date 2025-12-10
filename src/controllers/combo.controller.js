@@ -18,6 +18,8 @@ export const createCombo = async (req, res) => {
     const userId = req.userId;
     const { name, type, elements } = req.body;
 
+    console.log(elements)
+
     // Validaciones básicas
     if (!req.file) {
       return res.status(400).json({ success: false, message: "Debes subir un video para tu combo." });
@@ -121,8 +123,10 @@ export const createCombo = async (req, res) => {
       const userSkill = user.skills.find(s => s.variants.some(v => String(v._id) === String(el.userSkillVariantId)));
       if (!userSkill) continue;
 
-      const alreadyUsed = userSkill.usedInCombos.some(
-        u => String(u.combo) === String(combo._id) && String(u.variantKey) === String(el.variantKey)
+       const alreadyUsed = userSkill.usedInCombos.some(
+        u =>
+          String(u.combo) === String(combo._id) &&
+          String(u.userSkillVariantId) === String(el.userSkillVariantId)
       );
 
       if (!alreadyUsed) {
@@ -207,6 +211,7 @@ export const deleteCombo = async (req, res) => {
 
     // 6️⃣ Eliminar eventos del feed
     await FeedEvent.deleteMany({
+      user: userId,
       "metadata.comboId": comboId
     });
 
@@ -293,41 +298,56 @@ export const getComboById = async (req, res) => {
       });
     }
 
-    // ------------------- Traer todas las UserSkills del combo en un solo query -------------------
+    // ------------------- Buscar UserSkills usados -------------------
     const userSkillIds = combo.elements.map(el => el.userSkill);
-    const userSkills = await UserSkill.find({ _id: { $in: userSkillIds } })
-      .populate("skill"); // skill -> para variantes base
 
-    // Crear un diccionario para acceso rápido por _id
+    const userSkills = await UserSkill.find({
+      _id: { $in: userSkillIds }
+    }).populate("skill"); // skill original
+
     const userSkillMap = new Map();
     userSkills.forEach(us => userSkillMap.set(String(us._id), us));
 
-    // ------------------- Construir elementos detallados -------------------
+    // ------------------- Construir elementos con la variante usando userSkillVariantId -------------------
     const detailedElements = combo.elements.map(el => {
       const userSkill = userSkillMap.get(String(el.userSkill));
-      if (!userSkill || !userSkill.skill) return null;
+      if (!userSkill) return null;
 
-      const baseVariant = userSkill.skill.variants.find(v => v.variantKey === el.variantKey);
-      const userVariant = userSkill.variants.find(v => v.variantKey === el.variantKey);
+      // Buscar la variante EXACTA por su ID
+      const userVariant = userSkill.variants.find(v => String(v._id) === String(el.userSkillVariantId));
+      if (!userVariant) return null;
 
+      // Buscar variante base (misma variantKey)
+      const baseVariant = userSkill.skill.variants.find(v => v.variantKey === userVariant.variantKey);
       if (!baseVariant) return null;
 
       return {
         userSkill: el.userSkill,
-        skillName: userSkill.skill.name,                    
-        variantKey: el.variantKey,
-        variantName: baseVariant.name, 
+
+        // skill original
+        skillName: userSkill.skill.name,
+
+        // info variante
+        variantKey: userVariant.variantKey,
+        variantName: baseVariant.name,
+
+        // datos del combo
         hold: el.hold,
-        video: userVariant?.video || null,
-        fingers: userVariant?.fingers || null,
+        reps: el.reps,
+
+        // datos usuario
+        video: userVariant.video || null,
+        fingers: userVariant.fingers || null,
+
+        // stats base
         pointsPerSecond: baseVariant.stats?.pointsPerSecond || 0,
         pointsPerRep: baseVariant.stats?.pointsPerRep || 0,
         staticAu: baseVariant.staticAu || 0,
         dynamicAu: baseVariant.dynamicAu || 0,
       };
-    }).filter(Boolean); // eliminar elementos nulos
+    }).filter(Boolean);
 
-    // ------------------- Respuesta final -------------------
+    // ------------------- Respuesta -------------------
     return res.status(200).json({
       success: true,
       combo: {
@@ -340,7 +360,7 @@ export const getComboById = async (req, res) => {
         createdAt: combo.createdAt,
         updatedAt: combo.updatedAt,
         elements: detailedElements,
-        owner: combo.user, // enviamos dueño para el frontend
+        owner: combo.user,
       }
     });
 
@@ -352,6 +372,7 @@ export const getComboById = async (req, res) => {
     });
   }
 };
+
 
 /* ---------------------------- UPDATE ---------------------------- */
 
