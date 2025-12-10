@@ -5,19 +5,23 @@ import Skill from "../models/skill.model.js"; // para conocer las variantes y st
 import { calculateEnergyCost } from "../utils/calculateEnergyCost.js";
 import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
 
 /* ---------------------------- CREATE ---------------------------- */
 
 export const createCombo = async (req, res) => {
+  console.log(req.body);
+  let uploadResult = null;
+
   try {
     const userId = req.userId;
     const { name, type, elements } = req.body;
 
-    /* ------------------ VALIDACIONES BASICAS ------------------ */
-    if (!name || !type || !elements || !Array.isArray(elements)) {
+    // Validaciones básicas
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Faltan campos requeridos o elements no es un arreglo."
+        message: "Debes subir un video para tu combo."
       });
     }
 
@@ -25,84 +29,118 @@ export const createCombo = async (req, res) => {
       return res.status(400).json({ success: false, message: "Tipo de combo inválido." });
     }
 
-    if (elements.length < 3 || elements.length > 5) {
+    const parsedElements = JSON.parse(elements);
+
+    if (parsedElements.length < 3 || parsedElements.length > 10) {
       return res.status(400).json({
         success: false,
-        message: "Un combo debe tener entre 3 y 5 variantes."
+        message: "Un combo debe tener entre 3 y 10 variantes."
       });
     }
 
-    for (const el of elements) {
-      if (!el.userSkill || !el.variantKey || typeof el.hold !== "number" || el.hold < 3) {
-        return res.status(400).json({
-          success: false,
-          message: "Cada elemento debe incluir userSkill, variantKey y hold >= 3."
-        });
-      }
-    }
+    // Traer el usuario con sus skills
+    const user = await User.findById(userId)
+      .populate({
+        path: "skills",
+        populate: { path: "skill", model: "Skill" }
+      });
 
-    /* ------------------ VALIDAR USUARIO ------------------ */
-    const user = await User.findById(userId).populate({
-      path: "skills",
-      populate: { path: "skill", model: "Skill" }
-    });
+    if (!user) throw new Error("Usuario no encontrado");
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado." });
-    }
+    let totalEnergyCost = 0;
 
-    /* ------------------ VALIDAR ELEMENTOS Y CONSTRUIR COMBO ------------------ */
-    const comboElements = elements.map(el => {
+    // Validar cada variante y calcular energía
+    const comboElements = parsedElements.map(el => {
       const userSkill = user.skills.find(s => String(s._id) === String(el.userSkill));
-      if (!userSkill) throw new Error(`UserSkill ${el.userSkill} no te pertenece.`);
+      if (!userSkill) throw new Error("Ese skill no te pertenece");
 
       const skill = userSkill.skill;
-      if (!skill) throw new Error("Skill base no encontrada.");
-
       const variant = skill.variants.find(v => v.variantKey === el.variantKey);
-      if (!variant) throw new Error(`Variante '${el.variantKey}' no encontrada en Skill.`);
+      if (!variant) throw new Error(`Variante ${el.variantKey} no existe en skill ${skill.name}`);
 
-      if (type === "static" && variant.type !== "static") {
-        throw new Error(`Combo static solo puede usar variantes static. La variante '${el.variantKey}' es de tipo '${variant.type}'.`);
+      // Validar tipo de variante según tipo de combo
+      if (type === "static" && !["static", "basic"].includes(variant.type)) {
+        throw new Error(`No puedes usar variantes dinámicas en un combo estático.`);
       }
 
+      if (type === "dynamic" && !["dynamic", "basic"].includes(variant.type)) {
+        throw new Error(`No puedes usar variantes estáticas en un combo dinámico.`);
+      }
+
+      // Validar hold/reps
+      const usesHold = variant.stats.energyPerSecond > 0;
+      const hold = el.hold ?? 0;
+      const reps = el.reps ?? 0;
+
+      if (usesHold && hold < 1) {
+        throw new Error(`Variante ${variant.name} requiere hold en segundos.`);
+      }
+
+      if (!usesHold && reps < 1) {
+        throw new Error(`Variante ${variant.name} requiere reps.`);
+      }
+
+      // Calcular energía usada por esta variante
+      const energyUsed = usesHold ? hold * variant.stats.energyPerSecond : reps * variant.stats.energyPerRep;
+      totalEnergyCost += energyUsed;
+
       return {
-        userSkill: el.userSkill,
+        userSkill: userSkill._id,
         skill: skill._id,
-        variantKey: el.variantKey,
+        variantKey: variant.variantKey,
         variantData: variant,
-        hold: el.hold
+        hold: usesHold ? hold : 0,
+        reps: usesHold ? 0 : reps
       };
     });
 
-    /* ------------------ CALCULAR COSTO DE ENERGÍA ------------------ */
-    const totalEnergyCost = await calculateEnergyCost(elements);
-    if (totalEnergyCost > user.stats.energy) {
+    // Validar energía total según tipo de combo
+    const userEnergy = type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
+    if (totalEnergyCost > userEnergy) {
       return res.status(400).json({
         success: false,
-        message: "No tienes suficiente energía para crear este combo.",
-        totalEnergyCost,
-        maxEnergy: user.stats.energy
+        message: "No tienes suficiente energía para crear este combo."
       });
     }
 
-    /* ------------------ CREAR Y GUARDAR COMBO ------------------ */
+    // Subir video
+    uploadResult = await uploadToCloudinary(req.file, "combo_videos");
+
+    // Crear combo
     const combo = await Combo.create({
       user: userId,
       name,
       type,
       elements: comboElements,
+      video: uploadResult.secure_url,
       totalEnergyCost
     });
+
+    for (const el of parsedElements) {
+  const userSkill = user.skills.find(s => String(s._id) === String(el.userSkill));
+  if (!userSkill) continue;
+
+  const alreadyUsed = userSkill.usedInCombos.some(
+    u => String(u.combo) === String(combo._id) && u.variantKey === el.variantKey
+  );
+
+  if (!alreadyUsed) {
+    userSkill.usedInCombos.push({
+      combo: combo._id,
+      variantKey: el.variantKey
+    });
+    await userSkill.save();
+  }
+}
 
     user.combos.push(combo._id);
     await user.save();
 
-    const feedMessage = `creó un nuevo combo: ${name} (${type})`;
+    // Feed event
     await FeedEvent.create({
       user: userId,
       type: "NEW_COMBO",
-      message: feedMessage,
+      message: `creó un nuevo combo: ${name} (${type})`,
       metadata: { comboId: combo._id, type }
     });
 
@@ -110,18 +148,91 @@ export const createCombo = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Combo creado exitosamente.",
+      message: "Combo creado correctamente",
       combo,
       user: updatedUser
     });
+
   } catch (err) {
+    if (uploadResult?.secure_url) {
+      await deleteFromCloudinary(uploadResult.secure_url);
+    }
+
     return res.status(500).json({
       success: false,
-      message: "Error del servidor.",
-      error: err.message
+      message: err.message || "Error del servidor"
     });
   }
 };
+
+/* ---------------------------- DELETE ---------------------------- */
+
+export const deleteCombo = async (req, res) => {
+  try {
+    const { comboId } = req.params;
+    const userId = req.userId;
+
+    if (!comboId) {
+      return res.status(400).json({ success: false, message: "El ID del combo es requerido" });
+    }
+
+    const combo = await Combo.findById(comboId);
+    if (!combo) {
+      return res.status(404).json({ success: false, message: "Combo no encontrado" });
+    }
+
+    if (String(combo.user) !== String(userId)) {
+      return res.status(403).json({ success: false, message: "No tienes permiso para eliminar este combo" });
+    }
+
+    // 1️⃣ Eliminar referencias del combo en los UserSkill y detectar huérfanos
+
+      for (const el of combo.elements) {
+      await UserSkill.findByIdAndUpdate(
+        el.userSkill,
+        { $pull: { usedInCombos: { combo: combo._id } } }, // solo quita la referencia
+        { new: true }
+      );
+    }
+
+    if (combo.video) {
+  await deleteFromCloudinary(combo.video);
+}
+
+    // 4️⃣ Eliminar el Combo
+    await Combo.findByIdAndDelete(comboId);
+
+    // 5️⃣ Actualizar referencias del usuario
+    await User.findByIdAndUpdate(userId, {
+      $pull: { combos: comboId },
+      ...(combo.type === "static" && {
+        $unset: { "favoriteCombos.static": "" }
+      }),
+      ...(combo.type === "dynamic" && {
+        $unset: { "favoriteCombos.dynamic": "" }
+      })
+    });
+
+    // 6️⃣ Eliminar eventos del feed
+    await FeedEvent.deleteMany({
+      "metadata.comboId": comboId
+    });
+
+    // 7️⃣ Retornar usuario actualizado Full
+    const updatedUser = await UpdateFullUser(userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Combo eliminado correctamente",
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Error eliminando combo", error: error.message });
+  }
+};
+
 /* ---------------------------- GET ALL ---------------------------- */
 
 export const getUserCombos = async (req, res) => {
@@ -253,62 +364,8 @@ export const getComboById = async (req, res) => {
     });
   }
 };
-/* ---------------------------- DELETE ---------------------------- */
 
-export const deleteCombo = async (req, res) => {
-  try {
-    const { comboId } = req.params;
-    const userId = req.userId;
 
-    if (!comboId) {
-      return res.status(400).json({ success: false, message: "El ID del combo es requerido" });
-    }
-
-    const combo = await Combo.findById(comboId);
-    if (!combo) {
-      return res.status(404).json({ success: false, message: "Combo no encontrado" });
-    }
-
-    if (String(combo.user) !== String(userId)) {
-      return res.status(403).json({ success: false, message: "No tienes permiso para eliminar este combo" });
-    }
-
-    for (const el of combo.elements) {
-      await UserSkill.updateOne(
-        { _id: el.userSkill },
-        { $pull: { usedInCombos: comboId } }
-      );
-    }
-
-    // Eliminar el combo
-    await Combo.findByIdAndDelete(comboId);
-
-    // Remover referencias en el usuario
-    await User.findByIdAndUpdate(userId, {
-      $pull: { combos: comboId },
-      $unset: {
-        "favoriteCombos.static": combo.type === "static" ? comboId : undefined,
-        "favoriteCombos.dynamic": combo.type === "dynamic" ? comboId : undefined
-      }
-    });
-
-    await FeedEvent.deleteMany({
-      user: userId,
-      "metadata.comboId": comboId
-    });
-
-   const updatedUser = await UpdateFullUser(userId);
-
-      return res.status(200).json({
-        success: true,
-        message: "Combo eliminado correctamente",
-        user: updatedUser
-      });
-
-  } catch (error) {
-    return res.status(500).json({ success: false, message: "Error eliminando combo", error: error.message });
-  }
-};
 /* ---------------------------- UPDATE ---------------------------- */
 
 

@@ -13,7 +13,6 @@ const UserSkillVariantSchema = new Schema(
     video: { type: String, required: true },
     lastUpdated: { type: Date, default: Date.now } 
   },
-  { _id: false }
 );
 
 const UsedVariantSchema = new Schema(

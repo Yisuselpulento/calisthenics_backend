@@ -102,26 +102,27 @@ export const addSkillVariant = async (req, res) => {
 export const editSkillVariant = async (req, res) => {
   try {
     const userId = req.userId;
-    const { userSkillId, variantKey, fingers } = req.params;
+    const { userSkillVariantId } = req.params;
     const { newFingers } = req.body;
 
-    // Buscar la skill del usuario
-    const userSkill = await UserSkill.findOne({ _id: userSkillId, user: userId });
-    if (!userSkill)
-      return res.status(404).json({ success: false, message: "Skill no encontrada" });
+    if (!userSkillVariantId) {
+      return res.status(400).json({ success: false, message: "Debe proporcionar userSkillVariantId" });
+    }
+
+    // 🔹 Buscar UserSkill que tenga esta variante
+    const userSkill = await UserSkill.findOne({ "variants._id": userSkillVariantId, user: userId });
+    if (!userSkill) {
+      return res.status(404).json({ success: false, message: "Variante no encontrada" });
+    }
+
+    // 🔹 Obtener la variante
+    const variantIndex = userSkill.variants.findIndex(v => v._id.toString() === userSkillVariantId);
+    const variant = userSkill.variants[variantIndex];
 
     const skill = await Skill.findById(userSkill.skill);
-    if (!skill)
+    if (!skill) {
       return res.status(404).json({ success: false, message: "Skill base no encontrada" });
-
-    // Buscar variante actual
-    const variantIndex = userSkill.variants.findIndex(
-      (v) => v.variantKey === variantKey && v.fingers === Number(fingers)
-    );
-    if (variantIndex === -1)
-      return res.status(404).json({ success: false, message: "Variante no encontrada" });
-
-    const variant = userSkill.variants[variantIndex];
+    }
 
     // ----------------- Actualizar fingers -----------------
     if (newFingers !== undefined) {
@@ -133,15 +134,17 @@ export const editSkillVariant = async (req, res) => {
       }
 
       const nf = Number(newFingers);
-      if (![1, 2, 5].includes(nf))
+      if (![1, 2, 5].includes(nf)) {
         return res.status(400).json({ success: false, message: "Los fingers deben ser 1, 2 o 5" });
+      }
 
       // Verificar duplicados
       const exists = userSkill.variants.some(
         (v, i) => i !== variantIndex && v.variantKey === variant.variantKey && v.fingers === nf
       );
-      if (exists)
+      if (exists) {
         return res.status(400).json({ success: false, message: "Ya tienes esa variante con esos dedos" });
+      }
 
       variant.fingers = nf;
     }
@@ -154,7 +157,6 @@ export const editSkillVariant = async (req, res) => {
         result = await uploadToCloudinary(req.file, "user_skill_videos", "video");
         variant.video = result.secure_url;
       } catch (err) {
-        // rollback en caso de fallo
         if (result?.secure_url) await deleteFromCloudinary(result.secure_url);
         throw err;
       }
@@ -180,26 +182,28 @@ export const editSkillVariant = async (req, res) => {
 // -------------------- Eliminar Variante --------------------
 export const deleteSkillVariant = async (req, res) => {
   try {
-    const { userSkillId, variantKey, fingers } = req.params;
+    const { userSkillVariantId } = req.params;
     const userId = req.userId;
 
-    const userSkill = await UserSkill.findOne({ _id: userSkillId, user: userId });
-    if (!userSkill) {
-      return res.status(404).json({ success: false, message: "Skill no encontrada" });
+    if (!userSkillVariantId) {
+      return res.status(400).json({ success: false, message: "Debe proporcionar userSkillVariantId" });
     }
 
-    const variantIndex = userSkill.variants.findIndex(
-      v => v.variantKey === variantKey && v.fingers === Number(fingers)
-    );
-
-    if (variantIndex === -1) {
+    // 🔹 Buscar UserSkill que tenga esta variante
+    const userSkill = await UserSkill.findOne({ "variants._id": userSkillVariantId, user: userId });
+    if (!userSkill) {
       return res.status(404).json({ success: false, message: "Variante no encontrada" });
     }
 
+    // 🔹 Buscar la variante
+    const variantIndex = userSkill.variants.findIndex(v => v._id.toString() === userSkillVariantId);
+    const removedVariant = userSkill.variants[variantIndex];
+
+    // 🔹 Verificar si se usa en algún combo
     const variantUsed = await Combo.findOne({
       user: userId,
-      "elements.userSkill": userSkillId,
-      "elements.variantKey": variantKey
+      "elements.userSkill": userSkill._id,
+      "elements.userSkillVariantId": userSkillVariantId
     });
 
     if (variantUsed) {
@@ -209,12 +213,12 @@ export const deleteSkillVariant = async (req, res) => {
       });
     }
 
-    const removedVariant = userSkill.variants[variantIndex];
-
+    // 🔹 Eliminar video si existe
     if (removedVariant.video) {
       await deleteFromCloudinary(removedVariant.video);
     }
 
+    // 🔹 Eliminar la variante
     userSkill.variants.splice(variantIndex, 1);
 
     // ⚠️ Si ya no quedan variantes, borrar todo el UserSkill
@@ -230,9 +234,7 @@ export const deleteSkillVariant = async (req, res) => {
         "metadata.skillId": userSkill.skill.toString()
       });
 
-      // 🔥 Recalcular stats si se elimina la skill completa
       await getUserStats(userId);
-
       const fullUser = await UpdateFullUser(userId);
 
       return res.json({
@@ -242,20 +244,19 @@ export const deleteSkillVariant = async (req, res) => {
       });
     }
 
-    // Si quedan variantes: guardar y actualizar stats
+    // 🔹 Si quedan variantes: guardar y actualizar stats
     await userSkill.save();
     await getUserStats(userId);
 
     await FeedEvent.deleteMany({
       user: userId,
       "metadata.skillId": userSkill.skill.toString(),
-      "metadata.variantKey": variantKey,
-      "metadata.fingers": Number(fingers),
+      "metadata.userSkillVariantId": userSkillVariantId
     });
 
     await Combo.updateMany(
       { user: userId },
-      { $pull: { elements: { userSkill: userSkill._id, variantKey, fingers: Number(fingers) } } }
+      { $pull: { elements: { userSkill: userSkill._id, userSkillVariantId } } }
     );
 
     const fullUser = await UpdateFullUser(userId);
@@ -276,6 +277,7 @@ export const deleteSkillVariant = async (req, res) => {
 };
 
 
+
 // -------------------- Obtener Skills del Usuario --------------------
 export const getUserSkills = async (req, res) => {
   try {
@@ -289,54 +291,43 @@ export const getUserSkills = async (req, res) => {
 };
 
 export const toggleFavoriteSkill = async (req, res) => {
+
   try {
     const userId = req.userId;
-    const { userSkillId, variantKey, fingers } = req.params; 
+    const { userSkillVariantId } = req.params;
 
-    // 1. Buscar la skill aprendida del user
+    if (!userSkillVariantId) {
+      return res.status(400).json({ success: false, message: "Debe proporcionar userSkillVariantId" });
+    }
+
+    // 1. Buscar la UserSkill que tenga esta variante
     const userSkill = await UserSkill.findOne({
-      _id: userSkillId,
+      "variants._id": userSkillVariantId,
       user: userId,
     });
 
     if (!userSkill) {
-      return res.status(404).json({
-        success: false,
-        message: "Skill no encontrada en tu perfil"
-      });
+      return res.status(404).json({ success: false, message: "Variante no encontrada en tu perfil" });
     }
 
-    // 2. Verificar que la variante exista dentro de esa UserSkill con los fingers correctos
-    const variant = userSkill.variants.find(v => 
-      v.variantKey === variantKey && v.fingers === Number(fingers)
-    );
+    // 2. Obtener la variante
+    const variant = userSkill.variants.find(v => v._id.toString() === userSkillVariantId);
 
     if (!variant) {
-      return res.status(404).json({
-        success: false,
-        message: "Variante no encontrada dentro de tu skill con esos fingers"
-      });
+      return res.status(404).json({ success: false, message: "Variante no encontrada dentro de tu skill" });
     }
 
     const user = await User.findById(userId);
 
-    // 3. Verificar si YA es favorita
+    // 3. Verificar si ya es favorita
     const isFavorite = user.favoriteSkills.some(
-      fav =>
-        fav.userSkill.toString() === userSkillId.toString() &&
-        fav.variantKey === variantKey &&
-        fav.fingers === Number(fingers)
+      fav => fav.userSkillVariantId.toString() === userSkillVariantId
     );
 
     // --- Quitar favorito ---
     if (isFavorite) {
       user.favoriteSkills = user.favoriteSkills.filter(
-        fav =>
-          !(
-            fav.userSkill.toString() === userSkillId.toString() &&
-            fav.variantKey === variantKey &&
-            fav.fingers === Number(fingers)
-          )
+        fav => fav.userSkillVariantId.toString() !== userSkillVariantId
       );
 
       await user.save();
@@ -358,9 +349,9 @@ export const toggleFavoriteSkill = async (req, res) => {
 
     // --- Agregar favorito ---
     user.favoriteSkills.push({
-      userSkill: userSkillId,
-      variantKey,
-      fingers: Number(fingers), // <-- guardar fingers
+      userSkill: userSkill._id,
+      userSkillVariantId,
+      fingers: variant.fingers, // opcional, para referencia rápida
     });
 
     await user.save();
@@ -377,6 +368,7 @@ export const toggleFavoriteSkill = async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
+
 
 export const getFavoriteSkills = async (req, res) => {
   try {
@@ -426,53 +418,46 @@ export const getFavoriteSkills = async (req, res) => {
 // -------------------- Obtener skill específica del usuario --------------------
 export const getUserSkillVariantById = async (req, res) => {
   try {
-    const { userSkillId, variantKey, fingers } = req.params;
+    const { userSkillVariantId } = req.params;
 
-    if (!userSkillId || !variantKey || !fingers) {
+    if (!userSkillVariantId) {
       return res.status(400).json({
         success: false,
-        message: "Debe proporcionar userSkillId, variantKey y fingers",
+        message: "Debe proporcionar userSkillVariantId",
       });
     }
 
-    // 🔹 Buscar UserSkill con Skill poblado
-    const userSkill = await UserSkill.findById(userSkillId)
+    // Buscar la UserSkill que tenga esta variante
+    const userSkill = await UserSkill.findOne({ "variants._id": userSkillVariantId })
       .populate("skill")
       .lean();
 
     if (!userSkill) {
       return res.status(404).json({
         success: false,
-        message: "Skill no encontrada",
-      });
-    }
-
-    // 🔹 Buscar la variante en UserSkill
-    const userVariant = userSkill.variants.find(
-      (v) => v.variantKey === variantKey && v.fingers === Number(fingers)
-    );
-
-    if (!userVariant) {
-      return res.status(404).json({
-        success: false,
         message: "Variante no encontrada",
       });
     }
 
-    // 🔹 Buscar la variante en Skill para traer stats y demás info
-    const skillVariant = userSkill.skill.variants.find(
-      (v) => v.variantKey === variantKey
+    // Extraer la variante
+    const userVariant = userSkill.variants.find(
+      (v) => v._id.toString() === userSkillVariantId
     );
 
-    // 🔹 Preparar la info completa
+    // Extraer info de la Skill si existe la variante correspondiente
+    const skillVariant = userSkill.skill.variants.find(
+      (v) => v.variantKey === userVariant.variantKey
+    );
+
     const variantData = {
+      userSkillVariantId: userVariant._id,
       userSkillId: userSkill._id,
       skillId: userSkill.skill._id,
       skillName: userSkill.skill.name,
       skillKey: userSkill.skill.skillKey,
+      fingers: userVariant.fingers,
       skillDifficulty: userSkill.skill.difficulty,
       variantKey: userVariant.variantKey,
-      fingers: userVariant.fingers,
       name: skillVariant?.name || userVariant.variantKey,
       type: skillVariant?.type || "static",
       staticAU: skillVariant?.staticAu || 0,

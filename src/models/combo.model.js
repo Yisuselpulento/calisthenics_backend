@@ -24,14 +24,18 @@ const ComboElementSchema = new Schema(
 
     variantData: { type: Schema.Types.Mixed, required: true },
 
-    hold: {
-      type: Number,
-      required: true,
-      min: 3,
-    },
+    hold: { type: Number, min: 0, default: 0 },
+    reps: { type: Number, min: 0, default: 0 },
   },
   { _id: false }
+
 );
+
+ComboElementSchema.pre("validate", function () {
+  if (!this.hold && !this.reps) {
+    throw new Error("Cada variante debe tener hold o reps mayor a 0.");
+  }
+});
 
 const ComboSchema = new Schema(
   {
@@ -52,6 +56,7 @@ const ComboSchema = new Schema(
       enum: ["static", "dynamic"],
       required: true,
     },
+    video: { type: String, required: true },
 
     elements: {
       type: [ComboElementSchema],

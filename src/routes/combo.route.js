@@ -8,10 +8,16 @@ import {
   toggleFavoriteCombo,
 } from "../controllers/combo.controller.js";
 import { verifyAuth } from "../Auth/middleware/verifyAuth.js";
+import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-router.post("/", verifyAuth, createCombo);
+router.post(
+  "/",
+  verifyAuth,
+  upload.single("video"), 
+  createCombo
+);
 router.get("/", verifyAuth, getUserCombos);
 router.get("/:comboId", verifyAuth, getComboById);
 router.delete("/:comboId", verifyAuth, deleteCombo);

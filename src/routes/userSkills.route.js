@@ -21,18 +21,18 @@ router.post(
 );
 
 router.put(
-  "/edit/:userSkillId/:variantKey/:fingers",
+  "/edit/:userSkillVariantId",
   verifyAuth,
   upload.single("video"),
   editSkillVariant
 );
 
-router.delete("/delete/:userSkillId/:variantKey/:fingers", verifyAuth, deleteSkillVariant);
+router.delete("/delete/:userSkillVariantId", verifyAuth, deleteSkillVariant);
 
 router.get("/", verifyAuth, getUserSkills);
 
-router.post("/favorites/:userSkillId/:variantKey/:fingers", verifyAuth, toggleFavoriteSkill);
+router.post("/favorites/:userSkillVariantId", verifyAuth, toggleFavoriteSkill);
 router.get("/favorites", verifyAuth, getFavoriteSkills);
-router.get("/skill/:userSkillId/:variantKey/:fingers", verifyAuth, getUserSkillVariantById);
+router.get("/skill/variant/:userSkillVariantId", verifyAuth, getUserSkillVariantById);
 
 export default router;

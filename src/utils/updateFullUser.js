@@ -25,47 +25,47 @@ export const UpdateFullUser = async (userId) => {
 
   if (!user) return null;
 
-  // Reconstrucción de favoritos incluyendo fingers
   const favoriteSkills = user.favoriteSkills
-    .map((fs) => {
-      if (!fs.userSkill) return null;
+  .map((fs) => {
+    if (!fs.userSkill || !fs.userSkillVariantId) return null;
 
-      const variant = fs.userSkill.variants.find(
-        (v) => v.variantKey === fs.variantKey && v.fingers === fs.fingers
-      );
+    // Buscar la variante directamente por userSkillVariantId
+    const userVariant = fs.userSkill.variants.find(
+      (v) => v._id.toString() === fs.userSkillVariantId.toString()
+    );
+    if (!userVariant) return null;
 
-      if (!variant) return null;
+    // Buscar la variante base correspondiente (opcional, para stats o nombre)
+    const skillVariant = fs.userSkill.skill.variants.find(
+      (v) => v.variantKey === userVariant.variantKey
+    );
 
-      return {
-        _id: fs._id,
-        userSkill: fs.userSkill._id,
-        skill: fs.userSkill.skill,
-        variantKey: variant.variantKey,
-        fingers: variant.fingers,
-        video: variant.video,
-        name: fs.userSkill.skill.variants.find(v => v.variantKey === variant.variantKey)?.name || variant.variantKey,
-        type: fs.userSkill.skill.variants.find(v => v.variantKey === variant.variantKey)?.type || "static",
-      };
-    })
-    .filter(Boolean);
+    return {
+      favoriteSkillId: fs._id,             // ID del favorito
+      userSkillId: fs.userSkill._id,       // ID del UserSkill
+      skillId: fs.userSkill.skill._id,     // ID de la Skill base
+      userSkillVariantId: userVariant._id, // ID de la variante del usuario
+      variantBaseId: skillVariant?._id || null,
+      variantKey: userVariant.variantKey,
+      fingers: userVariant.fingers,
+      video: userVariant.video,
+      name: skillVariant?.name || userVariant.variantKey,
+      type: skillVariant?.type || "static",
+    };
+  })
+  .filter(Boolean);
 
-  // Reconstrucción de skills con variantes
   const skills = user.skills.map((us) => ({
-    _id: us._id,
-    skill: us.skill,
-    variants: us.variants.map((uv) => {
-      const skillVariant = us.skill.variants.find(v => v.variantKey === uv.variantKey);
-      return {
-        ...uv.toObject(),
-        name: skillVariant?.name || uv.variantKey,
-        type: skillVariant?.type || "static",
-        stats: skillVariant?.stats || {},
-        staticAU: skillVariant?.staticAu || 0,
-        dynamicAU: skillVariant?.dynamicAu || 0,
-        progressionLevel: skillVariant?.progressionLevel || 1,
-        difficulty: skillVariant?.difficulty || "basic",
-      };
-    }),
+    userSkillId: us._id,      
+    skillId: us.skill._id,     // ID de la Skill base
+    skillName: us.skill.name,  // Nombre de la Skill
+    variants: us.variants.map((uv) => ({
+      userSkillVariantId: uv._id, // ID de la variante del usuario
+      variantKey: uv.variantKey,
+      fingers: uv.fingers,
+      video: uv.video,
+      lastUpdated: uv.lastUpdated,
+    })),
   }));
 
   return {

@@ -111,8 +111,7 @@ videoProfile: { type: String, default: "" },
     favoriteSkills: [
     {
     userSkill: { type: Schema.Types.ObjectId, ref: "UserSkill", required: true },
-    variantKey: { type: String, required: true },
-    fingers: { type: Number, enum: [1, 2, 5], required: true }
+    userSkillVariantId: { type: Schema.Types.ObjectId, ref: "UserSkill.variants", required: true },
     }
 ],
 
