@@ -200,10 +200,14 @@ export const deleteSkillVariant = async (req, res) => {
     const removedVariant = userSkill.variants[variantIndex];
 
     // 🔹 Verificar si se usa en algún combo
-    const variantUsed = await Combo.findOne({
+      const variantUsed = await Combo.findOne({
       user: userId,
-      "elements.userSkill": userSkill._id,
-      "elements.userSkillVariantId": userSkillVariantId
+      elements: {
+        $elemMatch: {
+          userSkill: userSkill._id,
+          userSkillVariantId: userSkillVariantId
+        }
+      }
     });
 
     if (variantUsed) {

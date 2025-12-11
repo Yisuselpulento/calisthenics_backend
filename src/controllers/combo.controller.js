@@ -18,8 +18,6 @@ export const createCombo = async (req, res) => {
     const userId = req.userId;
     const { name, type, elements } = req.body;
 
-    console.log(elements)
-
     // Validaciones básicas
     if (!req.file) {
       return res.status(400).json({ success: false, message: "Debes subir un video para tu combo." });
@@ -173,6 +171,7 @@ export const deleteCombo = async (req, res) => {
     const { comboId } = req.params;
     const userId = req.userId;
 
+    console.log(comboId)
     if (!comboId) {
       return res.status(400).json({ success: false, message: "El ID del combo es requerido" });
     }
@@ -211,9 +210,9 @@ export const deleteCombo = async (req, res) => {
 
     // 6️⃣ Eliminar eventos del feed
     await FeedEvent.deleteMany({
-      user: userId,
-      "metadata.comboId": comboId
-    });
+  user: userId,
+  "metadata.comboId": new mongoose.Types.ObjectId(comboId)
+});
 
     // 7️⃣ Retornar usuario actualizado Full
     const updatedUser = await UpdateFullUser(userId);
