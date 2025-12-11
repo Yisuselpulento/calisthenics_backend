@@ -35,6 +35,17 @@ export const updateProfile = async (req, res) => {
     if (altura !== undefined) updates.altura = Number(altura);
     if (country !== undefined) updates.country = country;
 
+    if (peso !== undefined) {
+  const pesoNum = Number(peso);
+  if (pesoNum < 0) return res.status(400).json({ message: "Peso no puede ser negativo" });
+  updates.peso = pesoNum;
+    }
+    if (altura !== undefined) {
+      const alturaNum = Number(altura);
+      if (alturaNum < 0) return res.status(400).json({ message: "Altura no puede ser negativa" });
+      updates.altura = alturaNum;
+    }
+
     /* ---------------------- Avatar ---------------------- */
     if (req.files?.avatar) {
       // Borrar avatar anterior si existe
@@ -56,7 +67,7 @@ export const updateProfile = async (req, res) => {
     }
 
     /* ---------------------- Guardar ---------------------- */
-    const updatedUser = await User.findByIdAndUpdate(
+     await User.findByIdAndUpdate(
       userId,
       { $set: updates },
       { new: true }
