@@ -7,6 +7,7 @@ import { UpdateFullUser } from "../utils/updateFullUser.js";
 import Combo from "../models/combo.model.js";
 import { validateVariantProgression } from "../utils/variantValidation.js";
 import { getUserStats } from "../utils/getUserStats.js";
+import { createFeedEvent } from "../utils/createFeedEvent.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
@@ -68,19 +69,19 @@ export const addSkillVariant = async (req, res) => {
       { $addToSet: { skills: userSkill._id } }
     );
 
-    const feedMessage = `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`;
+    const newVariant = userSkill.variants[userSkill.variants.length - 1];
 
-    await FeedEvent.create({
-      user: userId,
-      type: "NEW_SKILL",
-      message: feedMessage,
-      metadata: {
-        skillId,
-        variantKey,
-        fingers: Number(fingers),
-        videoUrl: result.secure_url,
-      }
-    });
+    await createFeedEvent({
+  userId,
+  type: "NEW_SKILL",
+  message: `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`,
+  metadata: {
+    userSkillVariantId: newVariant._id,
+    variantKey,
+    fingers: Number(fingers),
+    videoUrl: result.secure_url,
+  }
+});
 
     await getUserStats(userId);
 

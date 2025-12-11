@@ -7,6 +7,7 @@ import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
 import mongoose from "mongoose";
+import { createFeedEvent } from "../utils/createFeedEvent.js";
 
 
 /* ---------------------------- CREATE ---------------------------- */
@@ -141,12 +142,16 @@ export const createCombo = async (req, res) => {
     await user.save();
 
     // Crear evento de feed
-    await FeedEvent.create({
-      user: userId,
-      type: "NEW_COMBO",
-      message: `creó un nuevo combo: ${name} (${type})`,
-      metadata: { comboId: combo._id, type }
-    });
+    await createFeedEvent({
+  userId,
+  type: "NEW_COMBO",
+  message: `creó un nuevo combo: ${name} (${type})`,
+  metadata: {
+    comboId: combo._id,
+    type,
+    videoUrl: uploadResult.secure_url    // 🔥 ahora también lleva video
+  }
+});
 
     // Actualizar usuario completo para frontend
     const updatedUser = await UpdateFullUser(userId);

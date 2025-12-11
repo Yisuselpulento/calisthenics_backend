@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { deleteFromCloudinary, uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 import User from "../models/user.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
+import { getAuthUser } from "../utils/getAuthUser.js";
 
 export const getProfileByUsername = async (req, res) => {
   try {
@@ -61,12 +62,12 @@ export const updateProfile = async (req, res) => {
       { new: true }
     ).select("-password");
 
-    const fullUser = await UpdateFullUser(userId);
+    const authUser = await getAuthUser(req.userId);
 
         res.json({
           success: true,
           message: "Perfil actualizado correctamente",
-          user: fullUser,
+          user: authUser,
         });
 
   } catch (error) {
@@ -159,12 +160,12 @@ export const updateAdvancedProfile = async (req, res) => {
     await User.findByIdAndUpdate(userId, { $set: updates });
 
     // 🔥 Asegurar usuario COMPLETO con skills, combos, etc.
-    const fullUser = await UpdateFullUser(userId);
+   const authUser = await getAuthUser(req.userId);
 
     return res.json({
       success: true,
       message: "Perfil avanzado actualizado correctamente",
-      user: fullUser,
+      user: authUser,
     });
 
   } catch (error) {
