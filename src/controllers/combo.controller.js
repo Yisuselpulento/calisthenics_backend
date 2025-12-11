@@ -346,6 +346,8 @@ export const getComboById = async (req, res) => {
         // stats base
         pointsPerSecond: baseVariant.stats?.pointsPerSecond || 0,
         pointsPerRep: baseVariant.stats?.pointsPerRep || 0,
+        energyPerRep: baseVariant.stats?.energyPerRep || 0,
+        energyPerSecond: baseVariant.stats?.energyPerSecond || 0,
         staticAu: baseVariant.staticAu || 0,
         dynamicAu: baseVariant.dynamicAu || 0,
       };
@@ -382,6 +384,8 @@ export const getComboById = async (req, res) => {
 
 
 export const updateCombo = async (req, res) => {
+  let uploadResult = null;
+
   try {
     const { comboId } = req.params;
     const userId = req.userId;
@@ -395,63 +399,92 @@ export const updateCombo = async (req, res) => {
     if (String(combo.user) !== String(userId))
       return res.status(403).json({ success: false, message: "No tienes permiso para actualizar este combo" });
 
-    // Si el usuario envía elementos para actualizar
-    let updatedElements = combo.elements;
-    if (elements) {
-      const user = await User.findById(userId).populate({ path: "skills", populate: { path: "skill", model: "Skill" } });
-      if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
-
-      updatedElements = [];
-
-      for (const el of elements) {
-        const userSkill = user.skills.find(s => String(s._id) === String(el.userSkill));
-        if (!userSkill) return res.status(403).json({ success: false, message: `Intentas usar una UserSkill que no te pertenece: ${el.userSkill}` });
-
-        const skill = userSkill.skill;
-        if (!skill) return res.status(400).json({ success: false, message: "Skill no encontrada en UserSkill" });
-
-        const variant = skill.variants.find(v => v.variantKey === el.variantKey);
-        if (!variant) return res.status(400).json({ success: false, message: `Variante '${el.variantKey}' no encontrada en la skill base` });
-
-        // Validación tipo de variante vs tipo de combo
-        if (!validateComboType(combo.type, variant.type))
-          return res.status(400).json({ success: false, message: `Combo ${combo.type} solo puede usar variantes ${combo.type}` });
-
-        updatedElements.push({
-          userSkill: el.userSkill,
-          skill: skill._id,
-          variantKey: el.variantKey,
-          variantData: variant,
-          hold: el.hold
-        });
+    // ✅ Actualizar video si viene archivo nuevo
+    if (req.file) {
+      uploadResult = await uploadToCloudinary(req.file, "combo_videos");
+      
+      // Borrar video antiguo si existe
+      if (combo.video) {
+        await deleteFromCloudinary(combo.video);
       }
 
-      // Validar que la energía total no exceda la del usuario
-      const totalEnergy = await calculateEnergyCost(updatedElements);
-      if (totalEnergy > user.stats.energy)
-        return res.status(400).json({ success: false, message: "No tienes suficiente energía para este combo" });
-
-      combo.elements = updatedElements;
-      combo.totalEnergyCost = totalEnergy;
+      combo.video = uploadResult.secure_url;
     }
 
-    // Actualizar nombre si viene
+    // ✅ Actualizar nombre
     if (name) combo.name = name;
+
+    // ✅ Actualizar holds/reps de elementos
+    if (elements && Array.isArray(elements)) {
+      // Crear un mapa rápido de elementos actuales por userSkillVariantId
+      const elementMap = new Map();
+      combo.elements.forEach(el => {
+        elementMap.set(String(el.userSkillVariantId), el);
+      });
+
+      for (const el of elements) {
+        const comboElement = elementMap.get(String(el.userSkillVariantId));
+        if (!comboElement) {
+          return res.status(400).json({
+            success: false,
+            message: `No puedes modificar elementos que no pertenecen al combo: ${el.userSkillVariantId}`
+          });
+        }
+
+        // Actualizar solo hold y reps
+        if (el.hold !== undefined) comboElement.hold = el.hold;
+        if (el.reps !== undefined) comboElement.reps = el.reps;
+
+        // Validación: al menos hold o reps > 0 según stats
+        const usesHold = comboElement.variantData.stats.energyPerSecond > 0;
+        if (usesHold && comboElement.hold < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Variante ${comboElement.variantData.name} requiere hold en segundos`
+          });
+        }
+        if (!usesHold && comboElement.reps < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Variante ${comboElement.variantData.name} requiere reps`
+          });
+        }
+      }
+
+      // Recalcular energía total
+      combo.totalEnergyCost = combo.elements.reduce((total, el) => {
+        const usesHold = el.variantData.stats.energyPerSecond > 0;
+        return total + (usesHold ? el.hold * el.variantData.stats.energyPerSecond : el.reps * el.variantData.stats.energyPerRep);
+      }, 0);
+
+      // Validar que el usuario tenga suficiente energía
+      const user = await User.findById(userId);
+      const userEnergy = combo.type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
+      if (combo.totalEnergyCost > userEnergy) {
+        return res.status(400).json({
+          success: false,
+          message: "No tienes suficiente energía para este combo con los cambios realizados"
+        });
+      }
+    }
 
     await combo.save();
 
     const updatedUser = await UpdateFullUser(userId);
 
-        return res.status(200).json({
-          success: true,
-          message: "Combo actualizado correctamente",
-          combo,
-          user: updatedUser
-        });
+    return res.status(200).json({
+      success: true,
+      message: "Combo actualizado correctamente",
+      combo,
+      user: updatedUser
+    });
 
   } catch (err) {
+    // Borrar video subido en caso de error
+    if (uploadResult?.secure_url) await deleteFromCloudinary(uploadResult.secure_url);
+
     console.error("Error en updateCombo:", err);
-    return res.status(500).json({ success: false, message: "Error actualizando combo", error: err.message });
+    return res.status(500).json({ success: false, message: err.message || "Error actualizando combo" });
   }
 };
 
