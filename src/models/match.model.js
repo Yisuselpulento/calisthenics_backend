@@ -12,6 +12,32 @@ const MatchSchema = new Schema(
       }
     ],
 
+    // 🔥 NUEVO (obligatorio)
+    playerData: [
+      {
+        user: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+
+        combo: {
+          type: Schema.Types.ObjectId,
+          ref: "Combo",
+          required: true,
+        },
+
+        points: { type: Number, default: 0 },
+
+        energySpent: { type: Number, default: 0 },
+
+        breakdown: {
+          type: Object,
+          default: {},
+        }
+      }
+    ],
+
     winner: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -37,6 +63,7 @@ const MatchSchema = new Schema(
       default: "casual",
     },
 
+    // puntos "globales" del match (puede ser el margen de diferencia)
     points: {
       type: Number,
       default: 0,
@@ -61,5 +88,6 @@ const MatchSchema = new Schema(
   },
   { timestamps: true }
 );
+
 
 export default mongoose.model("Match", MatchSchema);
