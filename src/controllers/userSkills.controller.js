@@ -454,6 +454,22 @@ export const getUserSkillVariantById = async (req, res) => {
       (v) => v.variantKey === userVariant.variantKey
     );
 
+     let usedInCombosDetailed = [];
+
+     if (Array.isArray(userSkill.usedInCombos) && userSkill.usedInCombos.length > 0) {
+      const comboIds = userSkill.usedInCombos.map((c) => c.combo);
+
+      const combos = await Combo.find(
+        { _id: { $in: comboIds } },
+        { name: 1 }
+      ).lean();
+
+      usedInCombosDetailed = combos.map((c) => ({
+        comboId: c._id,
+        name: c.name,
+      }));
+    }
+
     const variantData = {
       userSkillVariantId: userVariant._id,
       userSkillId: userSkill._id,
@@ -469,7 +485,7 @@ export const getUserSkillVariantById = async (req, res) => {
       dynamicAU: skillVariant?.dynamicAu || 0,
       stats: skillVariant?.stats || {},
       video: userVariant.video || null,
-      usedInCombos: userSkill.usedInCombos || [],
+      usedInCombos: usedInCombosDetailed,
     };
 
     return res.json({ success: true, variant: variantData });
