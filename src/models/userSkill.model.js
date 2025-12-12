@@ -11,23 +11,16 @@ const UserSkillVariantSchema = new Schema(
       default: 5,
     },
     video: { type: String, required: true },
-    lastUpdated: { type: Date, default: Date.now } 
-  },
-);
-
-const UsedVariantSchema = new Schema(
-  {
-    combo: {
-      type: Schema.Types.ObjectId,
-      ref: "Combo",
-      required: true,
+    lastUpdated: { type: Date, default: Date.now } ,
+    usedInCombos: {
+      type: [
+        {
+          combo: { type: Schema.Types.ObjectId, ref: "Combo", required: true },
+        },
+      ],
+      default: [],
     },
-      userSkillVariantId: {   
-      type: Schema.Types.ObjectId,
-      required: true,
-    }
   },
-  { _id: false }
 );
 
 const UserSkillSchema = new Schema(
@@ -47,11 +40,7 @@ const UserSkillSchema = new Schema(
     variants: {
       type: [UserSkillVariantSchema],
       default: [],
-    },
-    usedInCombos: {
-      type: [UsedVariantSchema],
-      default: [],
-    },
+    }
   },
   { timestamps: true }
 );

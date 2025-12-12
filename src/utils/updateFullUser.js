@@ -55,7 +55,9 @@ export const UpdateFullUser = async (userId) => {
   })
   .filter(Boolean);
 
-  const skills = user.skills.map((us) => ({
+  const sortedSkills = [...user.skills].sort((a, b) => b.createdAt - a.createdAt);
+
+  const skills = sortedSkills.map((us) => ({
     userSkillId: us._id,      
     skillId: us.skill._id,     // ID de la Skill base
     skillName: us.skill.name, 

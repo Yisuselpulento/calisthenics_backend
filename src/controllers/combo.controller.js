@@ -118,21 +118,17 @@ export const createCombo = async (req, res) => {
     });
 
     // Actualizar usedInCombos de cada userSkill
-    for (const el of parsedElements) {
-      const userSkill = user.skills.find(s => s.variants.some(v => String(v._id) === String(el.userSkillVariantId)));
+    for (const el of comboElements) {
+      const userSkill = await UserSkill.findById(el.userSkill);
       if (!userSkill) continue;
 
-       const alreadyUsed = userSkill.usedInCombos.some(
-        u =>
-          String(u.combo) === String(combo._id) &&
-          String(u.userSkillVariantId) === String(el.userSkillVariantId)
-      );
+      const variant = userSkill.variants.id(el.userSkillVariantId);
+      if (!variant) continue;
 
+      // Evitar duplicados
+      const alreadyUsed = variant.usedInCombos.some(u => String(u.combo) === String(combo._id));
       if (!alreadyUsed) {
-        userSkill.usedInCombos.push({
-          combo: combo._id,
-          userSkillVariantId: el.userSkillVariantId
-        });
+        variant.usedInCombos.push({ combo: combo._id });
         await userSkill.save();
       }
     }
@@ -193,11 +189,22 @@ export const deleteCombo = async (req, res) => {
     if (combo.video) {
   await deleteFromCloudinary(combo.video);
 
-      await UserSkill.updateMany(
-          { "usedInCombos.combo": comboId },
-          { $pull: { usedInCombos: { combo: comboId } } }
-        );
-    }
+   const userSkills = await UserSkill.find({
+    "variants.usedInCombos.combo": comboId
+  });
+
+  for (const userSkill of userSkills) {
+    let modified = false;
+
+    userSkill.variants.forEach(variant => {
+      const originalLength = variant.usedInCombos.length;
+      variant.usedInCombos = variant.usedInCombos.filter(u => String(u.combo) !== String(comboId));
+      if (variant.usedInCombos.length !== originalLength) modified = true;
+    });
+
+    if (modified) await userSkill.save();
+  }
+}
 
     // 4️⃣ Eliminar el Combo
     await Combo.findByIdAndDelete(comboId);

@@ -456,8 +456,8 @@ export const getUserSkillVariantById = async (req, res) => {
 
      let usedInCombosDetailed = [];
 
-     if (Array.isArray(userSkill.usedInCombos) && userSkill.usedInCombos.length > 0) {
-      const comboIds = userSkill.usedInCombos.map((c) => c.combo);
+     if (Array.isArray(userVariant.usedInCombos) && userVariant.usedInCombos.length > 0) {
+      const comboIds = userVariant.usedInCombos.map((c) => c.combo);
 
       const combos = await Combo.find(
         { _id: { $in: comboIds } },
