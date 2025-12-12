@@ -114,7 +114,10 @@ export const doMatch = async (req, res) => {
      * 6️⃣ Calcular puntos
      * ---------------------------------------- */
     const userAResult = calculateComboPointsStepByStep(userACombo.elements, userA.stats.energy);
-const userBResult = calculateComboPointsStepByStep(userBCombo.elements, userB.stats.energy);
+    const userBResult = calculateComboPointsStepByStep(userBCombo.elements, userB.stats.energy);
+
+    const userAWinner = userAResult.totalPoints >= userBResult.totalPoints;
+    const userBWinner = !userAWinner;
 
     /* ----------------------------------------
      * 7️⃣ Respuesta final
@@ -123,8 +126,8 @@ const userBResult = calculateComboPointsStepByStep(userBCombo.elements, userB.st
       success: true,
       userCombo: userACombo,
       opponentCombo: userBCombo,
-      userAResult,
-      userBResult,
+      userAResult: { ...userAResult, isWinner: userAWinner },
+      userBResult: { ...userBResult, isWinner: userBWinner },
     });
 
   } catch (error) {

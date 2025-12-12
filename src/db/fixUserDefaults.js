@@ -1,36 +1,33 @@
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-dotenv.config();
+import UserSkill from "../models/userSkill.model.js"; // ajusta la ruta
 
 const run = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("Connected to MongoDB");
 
-    const users = mongoose.connection.db.collection("users");
+    const userSkills = await UserSkill.find(); // traemos todos los UserSkills
 
-    // Defaults a aplicar a todos los usuarios que no tengan esos campos
-    const defaults = {
-      avatar: "https://upload.wikimedia.org/wikipedia/commons/b/b5/Windows_10_Default_Profile_Picture.svg",
-      country: "",
-      videoProfile: "",
-      altura: 0,
-      peso: 0
-    };
+    for (const us of userSkills) {
+      let modified = false;
 
-    // Recorremos cada key y aplicamos un updateMany
-    for (const [field, value] of Object.entries(defaults)) {
-      const result = await users.updateMany(
-        { [field]: { $exists: false } },
-        { $set: { [field]: value } }
-      );
-      console.log(`Updated ${result.modifiedCount} users missing "${field}"`);
+      us.variants.forEach(v => {
+        if (!v.usedInCombos) {
+          v.usedInCombos = [];
+          modified = true;
+        }
+      });
+
+      if (modified) {
+        await us.save();
+        console.log("Actualizado UserSkill:", us._id);
+      }
     }
 
-    console.log("All missing default fields added successfully!");
+    console.log("Proceso completado!");
     process.exit(0);
   } catch (error) {
-    console.error("Error updating users:", error);
+    console.error("Error updating UserSkills:", error);
     process.exit(1);
   }
 };
