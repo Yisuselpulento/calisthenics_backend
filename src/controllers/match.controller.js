@@ -1,8 +1,34 @@
 import User from "../models/user.model.js";
 import Combo from "../models/combo.model.js";
-import Match from "../models/match.model.js";
+import UserSkill from "../models/userSkill.model.js";
+import { calculateComboPointsStepByStep } from "../utils/calculateComboStats.js";
 
-import { calculateComboStats } from "../utils/calculateComboStats.js";
+const populateComboWithFingers = async (combo) => {
+  const elementsWithFingers = await Promise.all(
+    combo.elements.map(async (el) => {
+      // Buscar la variante correspondiente en UserSkill
+      const userSkill = await UserSkill.findOne(
+        { "variants._id": el.userSkillVariantId },
+        { "variants.$": 1 } // traer solo la variante que necesitamos
+      ).lean();
+
+      let fingers = 5; // valor por defecto
+      if (userSkill?.variants?.length > 0) {
+        fingers = userSkill.variants[0].fingers;
+      }
+
+      return {
+        ...el.toObject(), // todo lo que ya tenía el elemento
+        fingers,         // agregar solo fingers
+      };
+    })
+  );
+
+  return {
+    ...combo.toObject(),
+    elements: elementsWithFingers,
+  };
+};
 
 export const doMatch = async (req, res) => {
   try {
@@ -64,15 +90,12 @@ export const doMatch = async (req, res) => {
     /* ----------------------------------------
      * 4️⃣ Obtener combos completos
      * ---------------------------------------- */
-    const [userACombo, userBCombo] = await Promise.all([
-      Combo.findById(userAFavoriteComboId)
-        .populate("user", "username avatar"),
-
-      Combo.findById(userBFavoriteComboId)
-        .populate("user", "username avatar"),
+    const [userAComboRaw, userBComboRaw] = await Promise.all([
+      Combo.findById(userAFavoriteComboId).populate("user", "username avatar"),
+      Combo.findById(userBFavoriteComboId).populate("user", "username avatar"),
     ]);
 
-    if (!userACombo || !userBCombo) {
+    if (!userAComboRaw || !userBComboRaw) {
       return res.status(404).json({
         success: false,
         message: "No se encontraron los combos favoritos.",
@@ -80,21 +103,29 @@ export const doMatch = async (req, res) => {
     }
 
     /* ----------------------------------------
-     * 5️⃣ Calcular puntos y energía de ambos combos 🔥
+     * 5️⃣ Completar combos con fingers
      * ---------------------------------------- */
-    const userAResult = calculateComboStats(userACombo.elements, "Usuario A");
-const userBResult = calculateComboStats(userBCombo.elements, "Usuario B");
+    const [userACombo, userBCombo] = await Promise.all([
+      populateComboWithFingers(userAComboRaw),
+      populateComboWithFingers(userBComboRaw),
+    ]);
 
     /* ----------------------------------------
-     * 6️⃣ Respuesta final
+     * 6️⃣ Calcular puntos
      * ---------------------------------------- */
-   return res.status(200).json({
-  success: true,
-  userCombo: userACombo,
-  opponentCombo: userBCombo,
-  userAResult,
-  userBResult
-});
+    const userAResult = calculateComboPointsStepByStep(userACombo.elements, userA.stats.energy);
+const userBResult = calculateComboPointsStepByStep(userBCombo.elements, userB.stats.energy);
+
+    /* ----------------------------------------
+     * 7️⃣ Respuesta final
+     * ---------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      userCombo: userACombo,
+      opponentCombo: userBCombo,
+      userAResult,
+      userBResult,
+    });
 
   } catch (error) {
     console.error("❌ Error en doMatch:", error);
