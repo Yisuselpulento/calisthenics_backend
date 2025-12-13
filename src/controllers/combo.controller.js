@@ -45,9 +45,15 @@ export const createCombo = async (req, res) => {
 
     let totalEnergyCost = 0;
 
+      const seenVariants = new Set();
     // Validar cada variante usando userSkillVariantId
     const comboElements = parsedElements.map(el => {
       const userSkillVariantId = el.userSkillVariantId;
+
+       if (seenVariants.has(userSkillVariantId)) {
+        throw new Error(`No puedes usar la misma variante más de una vez en un combo.`);
+      }
+      seenVariants.add(userSkillVariantId);
 
       let foundVariant = null;
       let foundUserSkill = null;
