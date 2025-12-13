@@ -124,7 +124,7 @@ export const signup = async (req, res) => {
 
 
 export const login = async (req,res) => {
-
+     console.log("🔥 LOGIN HIT", new Date().toISOString());
     const { email, password  } = req.body;
 	try {
 
