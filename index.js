@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import http from "http";
 import express from "express"
 import cookieParser from "cookie-parser";
 import cors from "cors"
@@ -15,6 +16,8 @@ import notificationRoutes from "./src/routes/notification.route.js";
 import userRoutes from "./src/routes/user.route.js";
 import feedRoutes from "./src/routes/feed.route.js";
 import matchRoutes from "./src/routes/match.route.js";
+
+import { initMatchSockets } from "./src/Sockets/matchSockets.js";
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -36,9 +39,25 @@ app.use("/api/users", userRoutes);
 app.use("/api/feed", feedRoutes);
 app.use("/api/match", matchRoutes)
 
+const server = http.createServer(app);
+
+
+import { Server } from "socket.io";
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// Pasamos el objeto io a tu función para manejar eventos
+initMatchSockets(io);
+
+// Conectar MongoDB y levantar servidor
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
     });
   })
@@ -46,12 +65,3 @@ connectDB()
     console.error("❌ Error al conectar con MongoDB:", err);
     process.exit(1);
   });
-
-  // Capturar errores que no se lanzan dentro de promesas
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("⚠️ Unhandled Rejection:", reason);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("💀 Uncaught Exception:", err);
-});
