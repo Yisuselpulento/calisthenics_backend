@@ -247,7 +247,7 @@ export const logout = async (req, res) => {
 			secure: process.env.NODE_ENV === "production",
 			sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 			path: '/',
-            domain: process.env.NODE_ENV === "production" ? "calisthenics-backend.onrender.com" : undefined,
+            
 		});
 		res.status(200).json({ success: true, message: "Sesión cerrada exitosamente." });
 	} catch (error) {
