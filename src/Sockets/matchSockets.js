@@ -77,6 +77,14 @@ export const initMatchSockets = (io) => {
               // Emitir rechazo
               io.to(notification.fromUser.toString()).emit("challengeRejected", { challengeId, message: "Desafío rechazado" });
             }
+
+             await Notification.findByIdAndDelete(notification._id);
+
+        // ⚡ Reducir contador de notificaciones si quieres mantenerlo consistente
+        await User.findByIdAndUpdate(notification.user, {
+          $inc: { notificationsCount: -1 },
+        });
+
       } catch (err) {
         console.error("Error al manejar challengeResponse:", err);
       }

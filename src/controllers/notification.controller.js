@@ -3,7 +3,7 @@ import Notification from "../models/notification.model.js";
 import Team from "../models/team.model.js";
 import Skill from "../models/skill.model.js";
 import Combo from "../models/combo.model.js";
-import { UpdateFullUser } from "../utils/updateFullUser.js";
+import { getAuthUser } from "../utils/getAuthUser.js";
 
 /* ---------------------- OBTENER NOTIFICACIONES DEL USUARIO ---------------------- */
 export const getUserNotifications = async (req, res) => {
@@ -39,7 +39,7 @@ export const markNotificationAsRead = async (req, res) => {
     // Actualizar el contador de notificaciones no leídas
     await User.findByIdAndUpdate(userId, { $inc: { notificationsCount: -1 } });
 
-    const updatedUser = await UpdateFullUser(userId);
+    const updatedUser = await getAuthUser(userId);
 
         res.status(200).json({
           success: true,
@@ -62,7 +62,7 @@ export const markAllNotificationsAsRead = async (req, res) => {
     // Resetear contador de notificaciones no leídas
     await User.findByIdAndUpdate(userId, { notificationsCount: 0 });
 
-    const updatedUser = await UpdateFullUser(userId);
+    const updatedUser = await getAuthUser(userId);
 
       res.status(200).json({
         success: true,
