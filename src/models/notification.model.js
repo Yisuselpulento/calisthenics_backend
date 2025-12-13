@@ -31,6 +31,16 @@ const NotificationSchema = new Schema(
       required: true,
     },
 
+    challengeId: {
+      type: String,
+      default: null,
+    },
+
+    actions: {
+      type: [String], // ["accept", "reject"]
+      default: [],
+    },
+
     // Texto visible al usuario
     message: {
       type: String,

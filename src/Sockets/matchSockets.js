@@ -1,118 +1,90 @@
-import { doMatch } from "../controllers/match.controller.js";
+import crypto from "crypto";
+import Notification from "../models/notification.model.js";
+import User from "../models/user.model.js";
 
 export const initMatchSockets = (io) => {
-  const onlineUsers = new Map();       // userId -> socket.id
-  const pendingChallenges = new Map(); // challengeId -> data
-
   io.on("connection", (socket) => {
-    console.log("⚡ Usuario conectado:", socket.id);
+    console.log("⚡ Socket conectado:", socket.id);
 
-    socket.on("register", (userId) => {
-      onlineUsers.set(userId, socket.id);
+     socket.on("register", (userId) => {
       socket.userId = userId;
-      console.log("🟢 Usuario registrado:", userId);
+      socket.join(userId); // 👈 MUY IMPORTANTE
+      console.log("👤 Usuario registrado en socket:", userId);
     });
 
-    // 1️⃣ Enviar desafío
-    socket.on("challengeRequest", ({ fromUserId, toUserId, type }) => {
-      const opponentSocketId = onlineUsers.get(toUserId);
-
-      if (!opponentSocketId) {
-        return socket.emit("challengeRejected", {
-          message: "El oponente no está en línea.",
-        });
-      }
-
+    /* ----------- ENVIAR DESAFÍO ----------- */
+    socket.on(
+  "challengeRequest",
+  async ({ fromUserId, toUserId, type }, callback) => {
+    try {
       const challengeId = crypto.randomUUID();
 
-      pendingChallenges.set(challengeId, {
-        fromUserId,
-        toUserId,
-        type,
-        fromSocketId: socket.id,
-        toSocketId: opponentSocketId,
-      });
-
-      io.to(opponentSocketId).emit("incomingChallenge", {
+      const notification = await Notification.create({
+        user: toUserId,
+        fromUser: fromUserId,
+        type: "system",
+        message: "Te ha enviado un desafío",
+        metadata: {
+          type,              // static | dynamic
+          matchType: "casual"
+        },
         challengeId,
-        fromUserId,
-        type,
+        actions: ["accept", "reject"],
       });
-    });
 
-    // 2️⃣ Responder desafío (ACEPTAR / RECHAZAR)
-    socket.on("challengeResponse", async ({ challengeId, accepted }) => {
-      const challenge = pendingChallenges.get(challengeId);
+      const fullNotification = await Notification.findById(notification._id)
+        .populate("fromUser", "username avatar");
 
-      if (!challenge) return;
+      await User.findByIdAndUpdate(toUserId, {
+        $inc: { notificationsCount: 1 },
+      });
 
-      const {
-        fromUserId,
-        toUserId,
-        type,
-        fromSocketId,
-        toSocketId,
-      } = challenge;
+      io.to(toUserId).emit("newNotification", fullNotification);
 
-      pendingChallenges.delete(challengeId);
+      // ✅ ACK
+      callback({ success: true, challengeId });
+    } catch (err) {
+      callback({ success: false });
+    }
+  }
+);
 
-      if (!accepted) {
-        return io.to(fromSocketId).emit("challengeRejected", {
-          message: "El oponente rechazó el desafío.",
-        });
-      }
 
+     socket.on("challengeResponse", async ({ challengeId, accepted }) => {
       try {
-        const fakeReq = {
-          userId: fromUserId,
-          body: {
-            opponentId: toUserId,
-            type,
-            matchType: "casual",
-          },
-        };
+        // Buscar la notificación relacionada con el desafío
+        const notification = await Notification.findOne({ challengeId });
+        if (!notification) return;
 
-        const fakeRes = {
-          status: () => ({
-            json: (data) => {
-              if (data.success) {
-                io.to(fromSocketId).emit("challengeAccepted", data);
-                io.to(toSocketId).emit("challengeAccepted", data);
-              } else {
-                io.to(fromSocketId).emit("challengeRejected", {
-                  message: data.message,
-                });
-              }
-            },
-          }),
-        };
+        // Solo el receptor puede responder
+        if (socket.userId !== notification.user.toString()) return;
 
-        await doMatch(fakeReq, fakeRes);
+        // Marcar la notificación como leída
+        notification.read = true;
+        await notification.save();
+
+         if (accepted) {
+            io.to(notification.fromUser.toString()).emit("challengeAccepted", {
+            challengeId,
+            opponentId: notification.user.toString(), // quien aceptó
+          });
+
+          io.to(notification.user.toString()).emit("challengeAccepted", {
+            challengeId,
+            opponentId: notification.fromUser.toString(), // quien envió
+          });
+            } else {
+              // Emitir rechazo
+              io.to(notification.fromUser.toString()).emit("challengeRejected", { challengeId, message: "Desafío rechazado" });
+            }
       } catch (err) {
-        io.to(fromSocketId).emit("challengeRejected", {
-          message: "Error al iniciar el match.",
-        });
+        console.error("Error al manejar challengeResponse:", err);
       }
     });
+
 
     socket.on("disconnect", () => {
-      if (socket.userId) {
-        onlineUsers.delete(socket.userId);
-      }
-
-      // Limpiar desafíos pendientes del usuario desconectado
-      for (const [id, challenge] of pendingChallenges) {
-        if (
-          challenge.fromSocketId === socket.id ||
-          challenge.toSocketId === socket.id
-        ) {
-          pendingChallenges.delete(id);
-        }
-      }
-
-      console.log("🔴 Usuario desconectado:", socket.id);
+      console.log("🔴 Socket desconectado:", socket.id);
     });
   });
-
-  return io;
 };
