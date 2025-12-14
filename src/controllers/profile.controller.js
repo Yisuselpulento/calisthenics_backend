@@ -3,6 +3,7 @@ import { deleteFromCloudinary, uploadToCloudinary } from "../utils/uploadToCloud
 import User from "../models/user.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 import { getAuthUser } from "../utils/getAuthUser.js";
+import { cloudinaryFolder } from "../utils/cloudinaryFolder.js";
 
 export const getProfileByUsername = async (req, res) => {
   try {
@@ -22,74 +23,127 @@ export const getProfileByUsername = async (req, res) => {
 
 
 export const updateProfile = async (req, res) => {
+  let avatarUpload = null;
+  let videoUpload = null;
+
   try {
     const userId = req.userId;
     const { peso, altura, country } = req.body;
 
+    if (!req.user?.username) {
+      throw new Error("Username no disponible para subir archivos");
+    }
+
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
 
     const updates = {};
 
-    if (peso !== undefined) updates.peso = Number(peso);
-    if (altura !== undefined) updates.altura = Number(altura);
-    if (country !== undefined) updates.country = country;
-
+    /* ------------------ Datos básicos ------------------ */
     if (peso !== undefined) {
-  const pesoNum = Number(peso);
-  if (pesoNum < 0) return res.status(400).json({ message: "Peso no puede ser negativo" });
-  updates.peso = pesoNum;
+      const pesoNum = Number(peso);
+      if (pesoNum < 0) {
+        return res.status(400).json({ message: "Peso no puede ser negativo" });
+      }
+      updates.peso = pesoNum;
     }
+
     if (altura !== undefined) {
       const alturaNum = Number(altura);
-      if (alturaNum < 0) return res.status(400).json({ message: "Altura no puede ser negativa" });
+      if (alturaNum < 0) {
+        return res.status(400).json({ message: "Altura no puede ser negativa" });
+      }
       updates.altura = alturaNum;
     }
 
-    /* ---------------------- Avatar ---------------------- */
-    if (req.files?.avatar) {
-      // Borrar avatar anterior si existe
-      if (user.avatar) await deleteFromCloudinary(user.avatar);
-
-      const file = req.files.avatar[0];
-      const result = await uploadToCloudinary(file, "avatars");
-      updates.avatar = result.secure_url;
+    if (country !== undefined) {
+      updates.country = country;
     }
 
-    /* --------------------- Video Profile --------------------- */
-    if (req.files?.videoProfile) {
-      // Borrar video anterior si existe
-      if (user.videoProfile) await deleteFromCloudinary(user.videoProfile);
+    /* ---------------------- Avatar ---------------------- */
+    if (req.files?.avatar?.[0]) {
+      const file = req.files.avatar[0];
 
+      avatarUpload = await uploadToCloudinary(
+        file,
+        cloudinaryFolder({
+          username: req.user.username,
+          type: "avatars",
+        })
+      );
+
+      if (user.avatar?.publicId) {
+        await deleteFromCloudinary(
+          user.avatar.publicId,
+          "image"
+        );
+      }
+
+      updates.avatar = {
+        url: avatarUpload.url,
+        publicId: avatarUpload.publicId,
+      };
+    }
+
+    /* ------------------ Video profile ------------------ */
+    if (req.files?.videoProfile?.[0]) {
       const file = req.files.videoProfile[0];
-      const result = await uploadToCloudinary(file, "video_profiles");
-      updates.videoProfile = result.secure_url;
+
+      videoUpload = await uploadToCloudinary(
+        file,
+        cloudinaryFolder({
+          username: req.user.username,
+          type: "video_profile",
+        })
+      );
+
+      if (user.videoProfile?.publicId) {
+        await deleteFromCloudinary(
+          user.videoProfile.publicId,
+          "video"
+        );
+      }
+
+      updates.videoProfile = {
+        url: videoUpload.url,
+        publicId: videoUpload.publicId,
+      };
     }
 
     /* ---------------------- Guardar ---------------------- */
-     await User.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
       userId,
       { $set: updates },
       { new: true }
     ).select("-password");
 
-    const authUser = await getAuthUser(req.userId);
+    const authUser = await getAuthUser(userId);
 
-        res.json({
-          success: true,
-          message: "Perfil actualizado correctamente",
-          user: authUser,
-        });
+    return res.json({
+      success: true,
+      message: "Perfil actualizado correctamente",
+      user: authUser,
+    });
 
   } catch (error) {
+    // cleanup si algo falla después del upload
+    if (avatarUpload?.publicId) {
+      await deleteFromCloudinary(avatarUpload.publicId, "image");
+    }
+
+    if (videoUpload?.publicId) {
+      await deleteFromCloudinary(videoUpload.publicId, "video");
+    }
+
     console.error("updateProfile error:", error);
-    res.status(500).json({ message: "Error del servidor" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
 
 export const updateAdvancedProfile = async (req, res) => {
-   console.log("updateAdvancedProfile called with body:", req.body);
   try {
     const userId = req.userId;
     const { username, email, password,  profileType  } = req.body;
@@ -134,17 +188,17 @@ export const updateAdvancedProfile = async (req, res) => {
     }
 
     if (email) {
-      const existsEmail = await User.findOne({ email });
-      if (existsEmail && existsEmail._id.toString() !== userId) {
-        return res.status(409).json({
-          success: false,
-          message: "El email ya está registrado",
-        });
-      }
+  const existsEmail = await User.findOne({ email });
+  if (existsEmail && existsEmail._id.toString() !== user._id.toString()) {
+    return res.status(409).json({
+      success: false,
+      message: "El email ya está registrado",
+    });
+  }
 
-      updates.email = email;
-      editedSomething = true;
-    }
+  updates.email = email;
+  editedSomething = true;
+}
 
     if (password) {
       const hashed = await bcrypt.hash(password, 10);

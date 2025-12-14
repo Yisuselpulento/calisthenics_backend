@@ -16,8 +16,8 @@ export const searchUsers = async (req, res) => {
 
     const users = await User.find({
       _id: { $ne: currentUserId }, // excluye al usuario actual
-      $or: [{ name: regex }, { username: regex }],
-    }).select("name username avatar fullName");
+      $or: [{ fullName: regex }, { username: regex }],
+    }).select("fullName username avatar");
 
     return res.status(200).json({
       success: true,

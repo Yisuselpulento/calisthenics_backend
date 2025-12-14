@@ -8,83 +8,123 @@ import Combo from "../models/combo.model.js";
 import { validateVariantProgression } from "../utils/variantValidation.js";
 import { getUserStats } from "../utils/getUserStats.js";
 import { createFeedEvent } from "../utils/createFeedEvent.js";
+import { cloudinaryFolder } from "../utils/cloudinaryFolder.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
+  let uploadResult = null;
+
   try {
     const userId = req.userId;
     const { skillId, variantKey, fingers = 5 } = req.body;
 
+    if (!req.user?.username) { throw new Error("Username no disponible para subir archivos"); }
+
+    /* ------------------ Validaciones básicas ------------------ */
     if (!skillId || !variantKey || ![1, 2, 5].includes(Number(fingers))) {
-      return res.status(400).json({ success: false, message: "Faltan datos o fingers inválido" });
+      return res.status(400).json({
+        success: false,
+        message: "Faltan datos o fingers inválido"
+      });
     }
 
     const skill = await Skill.findById(skillId);
     if (!skill) {
-      return res.status(404).json({ success: false, message: "Skill base no encontrada" });
+      return res.status(404).json({
+        success: false,
+        message: "Skill base no encontrada"
+      });
     }
 
-    let userSkill = await UserSkill.findOne({ user: userId, skill: skillId });
+    let userSkill = await UserSkill.findOne({
+      user: userId,
+      skill: skillId
+    });
+
     if (!userSkill) {
-      userSkill = new UserSkill({ user: userId, skill: skillId, variants: [] });
+      userSkill = new UserSkill({
+        user: userId,
+        skill: skillId,
+        variants: []
+      });
     }
 
-    const exists = userSkill.variants.some(v =>
-      v.variantKey === variantKey && v.fingers === Number(fingers)
+    const exists = userSkill.variants.some(
+      v => v.variantKey === variantKey && v.fingers === Number(fingers)
     );
+
     if (exists) {
-      return res.status(400).json({ success: false, message: "Ya tienes esa variante con esos dedos" });
+      return res.status(400).json({
+        success: false,
+        message: "Ya tienes esa variante con esos dedos"
+      });
     }
 
-    const validation = validateVariantProgression(skill, userSkill, variantKey);
+    const validation = validateVariantProgression(
+      skill,
+      userSkill,
+      variantKey
+    );
+
     if (!validation.valid) {
-      return res.status(400).json({ success: false, message: validation.message });
+      return res.status(400).json({
+        success: false,
+        message: validation.message
+      });
     }
 
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "El video es obligatorio" });
+      return res.status(400).json({
+        success: false,
+        message: "El video es obligatorio"
+      });
     }
 
-    let result;
-      try {
-        result = await uploadToCloudinary(req.file, "user_skill_videos", "video");
+    /* ------------------ Subir video ------------------ */
+    uploadResult = await uploadToCloudinary(
+  req.file,
+  cloudinaryFolder({
+    username: req.user.username,
+    type: "user_skill_videos",
+  })
+);
 
-        userSkill.variants.push({
-          variantKey,
-          fingers: Number(fingers),
-          video: result.secure_url,
-          lastUpdated: new Date()
-        });
+    /* ------------------ Guardar variante ------------------ */
+    userSkill.variants.push({
+      variantKey,
+      fingers: Number(fingers),
+      video: {
+        url: uploadResult.url,
+        publicId: uploadResult.publicId
+      },
+      lastUpdated: new Date()
+    });
 
-        await userSkill.save(); 
-      } catch (err) {
-        if (result?.secure_url) {
-          await deleteFromCloudinary(result.secure_url);
-        }
-        throw err; 
-      }
+    await userSkill.save();
 
-    await User.findByIdAndUpdate(
-      userId,
-      { $addToSet: { skills: userSkill._id } }
-    );
+    /* ------------------ Asociar skill al usuario ------------------ */
+    await User.findByIdAndUpdate(userId, {
+      $addToSet: { skills: userSkill._id }
+    });
 
-    const newVariant = userSkill.variants[userSkill.variants.length - 1];
+    const newVariant =
+      userSkill.variants[userSkill.variants.length - 1];
 
+    /* ------------------ Feed event ------------------ */
     await createFeedEvent({
-  userId,
-  type: "NEW_SKILL",
-  message: `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`,
-  metadata: {
-    userSkillVariantId: newVariant._id,
-    variantKey,
-    fingers: Number(fingers),
-    videoUrl: result.secure_url,
-  }
-});
+      userId,
+      type: "NEW_SKILL",
+      message: `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`,
+      metadata: {
+        userSkillVariantId: newVariant._id,
+        variantKey,
+        fingers: Number(fingers),
+        videoUrl: uploadResult.url
+      }
+    });
 
+    /* ------------------ Stats + user full ------------------ */
     await getUserStats(userId);
-
     const fullUser = await UpdateFullUser(userId);
 
     return res.json({
@@ -94,90 +134,151 @@ export const addSkillVariant = async (req, res) => {
     });
 
   } catch (err) {
+    if (uploadResult?.publicId) {
+      await deleteFromCloudinary(uploadResult.publicId, "video");
+    }
+
     console.error("addSkillVariant:", err);
-    res.status(500).json({ success: false, message: "Error del servidor" });
+    return res.status(500).json({
+      success: false,
+      message: "Error del servidor"
+    });
   }
 };
 
+
 // -------------------- Editar Variante --------------------
 export const editSkillVariant = async (req, res) => {
+  let uploadResult = null;
+
   try {
     const userId = req.userId;
     const { userSkillVariantId } = req.params;
     const { newFingers } = req.body;
 
+    if (!req.user?.username) {
+  throw new Error("Username no disponible para subir archivos");
+}
+
     if (!userSkillVariantId) {
-      return res.status(400).json({ success: false, message: "Debe proporcionar userSkillVariantId" });
+      return res.status(400).json({
+        success: false,
+        message: "Debe proporcionar userSkillVariantId"
+      });
     }
 
-    // 🔹 Buscar UserSkill que tenga esta variante
-    const userSkill = await UserSkill.findOne({ "variants._id": userSkillVariantId, user: userId });
+    /* ------------------ Buscar UserSkill ------------------ */
+    const userSkill = await UserSkill.findOne({
+      user: userId,
+      "variants._id": userSkillVariantId
+    });
+
     if (!userSkill) {
-      return res.status(404).json({ success: false, message: "Variante no encontrada" });
+      return res.status(404).json({
+        success: false,
+        message: "Variante no encontrada"
+      });
     }
 
-    // 🔹 Obtener la variante
-    const variantIndex = userSkill.variants.findIndex(v => v._id.toString() === userSkillVariantId);
+    /* ------------------ Obtener variante ------------------ */
+    const variantIndex = userSkill.variants.findIndex(
+      v => v._id.toString() === userSkillVariantId
+    );
+
     const variant = userSkill.variants[variantIndex];
 
     const skill = await Skill.findById(userSkill.skill);
     if (!skill) {
-      return res.status(404).json({ success: false, message: "Skill base no encontrada" });
+      return res.status(404).json({
+        success: false,
+        message: "Skill base no encontrada"
+      });
     }
 
-    // ----------------- Actualizar fingers -----------------
+    /* ------------------ Actualizar fingers ------------------ */
     if (newFingers !== undefined) {
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: "Al cambiar los fingers, debes subir un nuevo video",
+          message: "Al cambiar los fingers, debes subir un nuevo video"
         });
       }
 
       const nf = Number(newFingers);
       if (![1, 2, 5].includes(nf)) {
-        return res.status(400).json({ success: false, message: "Los fingers deben ser 1, 2 o 5" });
+        return res.status(400).json({
+          success: false,
+          message: "Los fingers deben ser 1, 2 o 5"
+        });
       }
 
-      // Verificar duplicados
       const exists = userSkill.variants.some(
-        (v, i) => i !== variantIndex && v.variantKey === variant.variantKey && v.fingers === nf
+        (v, i) =>
+          i !== variantIndex &&
+          v.variantKey === variant.variantKey &&
+          v.fingers === nf
       );
+
       if (exists) {
-        return res.status(400).json({ success: false, message: "Ya tienes esa variante con esos dedos" });
+        return res.status(400).json({
+          success: false,
+          message: "Ya tienes esa variante con esos dedos"
+        });
       }
 
       variant.fingers = nf;
     }
 
-    // ----------------- Reemplazar video -----------------
+    /* ------------------ Reemplazar video ------------------ */
     if (req.file) {
-      let result;
-      try {
-        if (variant.video) await deleteFromCloudinary(variant.video);
-        result = await uploadToCloudinary(req.file, "user_skill_videos", "video");
-        variant.video = result.secure_url;
-      } catch (err) {
-        if (result?.secure_url) await deleteFromCloudinary(result.secure_url);
-        throw err;
+      uploadResult = await uploadToCloudinary(
+         req.file, cloudinaryFolder({ 
+          username: req.user.username, type: "user_skill_videos", }) );
+
+      // borrar video anterior
+      if (variant.video?.publicId) {
+        await deleteFromCloudinary(
+          variant.video.publicId,
+          "video"
+        );
       }
+
+      variant.video = {
+        url: uploadResult.url,
+        publicId: uploadResult.publicId
+      };
     }
 
-    // ----------------- Guardar cambios -----------------
+    variant.lastUpdated = new Date();
+
+    /* ------------------ Guardar cambios ------------------ */
     await userSkill.save();
 
     const fullUser = await UpdateFullUser(userId);
+
     return res.json({
       success: true,
       message: "Variante actualizada correctamente",
-      user: fullUser,
+      user: fullUser
     });
 
   } catch (err) {
+    // cleanup si falló después del upload
+    if (uploadResult?.publicId) {
+      await deleteFromCloudinary(
+        uploadResult.publicId,
+        "video"
+      );
+    }
+
     console.error("editSkillVariant:", err);
-    return res.status(500).json({ success: false, message: "Error del servidor" });
+    return res.status(500).json({
+      success: false,
+      message: "Error del servidor"
+    });
   }
 };
+
 
 
 // -------------------- Eliminar Variante --------------------
@@ -219,8 +320,11 @@ export const deleteSkillVariant = async (req, res) => {
     }
 
     // 🔹 Eliminar video si existe
-    if (removedVariant.video) {
-      await deleteFromCloudinary(removedVariant.video);
+    if (removedVariant.video?.publicId) {
+      await deleteFromCloudinary(
+        removedVariant.video.publicId,
+        "video"
+      );
     }
 
     // 🔹 Eliminar la variante

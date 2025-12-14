@@ -73,16 +73,25 @@ const UserSchema = new Schema(
     },
 
     avatar: {
-     type: String,
-      default: "https://upload.wikimedia.org/wikipedia/commons/b/b5/Windows_10_Default_Profile_Picture.svg",
-    },
+        url: {
+    type: String,
+    default: "https://upload.wikimedia.org/wikipedia/commons/b/b5/Windows_10_Default_Profile_Picture.svg",
+          },
+          publicId: {
+            type: String,
+            default: null,
+          },
+        },
     country: {
   type: String,
   default: "",
     },  
  altura: { type: Number, default: 0 },
 peso: { type: Number, default: 0 },
-videoProfile: { type: String, default: "" },
+videoProfile: {
+  url: { type: String },
+  publicId: { type: String },
+},
 
     stats: {
       mainAura: { type: Number, default: 0 },

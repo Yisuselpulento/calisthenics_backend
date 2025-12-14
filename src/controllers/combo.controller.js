@@ -8,6 +8,7 @@ import { UpdateFullUser } from "../utils/updateFullUser.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
 import mongoose from "mongoose";
 import { createFeedEvent } from "../utils/createFeedEvent.js";
+import { cloudinaryFolder } from "../utils/cloudinaryFolder.js";
 
 
 /* ---------------------------- CREATE ---------------------------- */
@@ -18,6 +19,10 @@ export const createCombo = async (req, res) => {
   try {
     const userId = req.userId;
     const { name, type, elements } = req.body;
+
+    if (!req.user?.username) {
+  throw new Error("Username no disponible para subir archivos");
+}
 
     // Validaciones básicas
     if (!req.file) {
@@ -111,7 +116,13 @@ export const createCombo = async (req, res) => {
     }
 
     // Subir video
-    uploadResult = await uploadToCloudinary(req.file, "combo_videos");
+    uploadResult = await uploadToCloudinary(
+        req.file,
+        cloudinaryFolder({
+          username: req.user.username,
+          type: "user_combos",
+        })
+      );
 
     // Crear combo
     const combo = await Combo.create({
@@ -119,7 +130,10 @@ export const createCombo = async (req, res) => {
       name,
       type,
       elements: comboElements,
-      video: uploadResult.secure_url,
+      video: {
+        url: uploadResult.url,
+        publicId: uploadResult.publicId
+      },
       totalEnergyCost
     });
 
@@ -151,7 +165,7 @@ export const createCombo = async (req, res) => {
   metadata: {
     comboId: combo._id,
     type,
-    videoUrl: uploadResult.secure_url    // 🔥 ahora también lleva video
+    videoUrl: uploadResult.url
   }
 });
 
@@ -166,7 +180,8 @@ export const createCombo = async (req, res) => {
     });
 
   } catch (err) {
-    if (uploadResult?.secure_url) await deleteFromCloudinary(uploadResult.secure_url);
+   if (uploadResult?.publicId)
+  await deleteFromCloudinary(uploadResult.publicId, "video");
     return res.status(500).json({ success: false, message: err.message || "Error del servidor" });
   }
 };
@@ -178,44 +193,58 @@ export const deleteCombo = async (req, res) => {
     const { comboId } = req.params;
     const userId = req.userId;
 
-    console.log(comboId)
     if (!comboId) {
-      return res.status(400).json({ success: false, message: "El ID del combo es requerido" });
+      return res.status(400).json({
+        success: false,
+        message: "El ID del combo es requerido"
+      });
     }
 
     const combo = await Combo.findById(comboId);
     if (!combo) {
-      return res.status(404).json({ success: false, message: "Combo no encontrado" });
+      return res.status(404).json({
+        success: false,
+        message: "Combo no encontrado"
+      });
     }
 
     if (String(combo.user) !== String(userId)) {
-      return res.status(403).json({ success: false, message: "No tienes permiso para eliminar este combo" });
+      return res.status(403).json({
+        success: false,
+        message: "No tienes permiso para eliminar este combo"
+      });
     }
 
-    if (combo.video) {
-  await deleteFromCloudinary(combo.video);
+    /* ------------------ Borrar video de Cloudinary ------------------ */
+    if (combo.video?.publicId) {
+      await deleteFromCloudinary(combo.video.publicId, "video");
+    }
 
-   const userSkills = await UserSkill.find({
-    "variants.usedInCombos.combo": comboId
-  });
-
-  for (const userSkill of userSkills) {
-    let modified = false;
-
-    userSkill.variants.forEach(variant => {
-      const originalLength = variant.usedInCombos.length;
-      variant.usedInCombos = variant.usedInCombos.filter(u => String(u.combo) !== String(comboId));
-      if (variant.usedInCombos.length !== originalLength) modified = true;
+    /* ------------------ Limpiar usedInCombos ------------------ */
+    const userSkills = await UserSkill.find({
+      "variants.usedInCombos.combo": comboId
     });
 
-    if (modified) await userSkill.save();
-  }
-}
+    for (const userSkill of userSkills) {
+      let modified = false;
 
-    // 4️⃣ Eliminar el Combo
+      userSkill.variants.forEach(variant => {
+        const originalLength = variant.usedInCombos.length;
+        variant.usedInCombos = variant.usedInCombos.filter(
+          u => String(u.combo) !== String(comboId)
+        );
+        if (variant.usedInCombos.length !== originalLength) {
+          modified = true;
+        }
+      });
+
+      if (modified) await userSkill.save();
+    }
+
+    /* ------------------ Eliminar combo ------------------ */
     await Combo.findByIdAndDelete(comboId);
 
-    // 5️⃣ Actualizar referencias del usuario
+    /* ------------------ Actualizar usuario ------------------ */
     await User.findByIdAndUpdate(userId, {
       $pull: { combos: comboId },
       ...(combo.type === "static" && {
@@ -226,13 +255,13 @@ export const deleteCombo = async (req, res) => {
       })
     });
 
-    // 6️⃣ Eliminar eventos del feed
+    /* ------------------ Eliminar eventos del feed ------------------ */
     await FeedEvent.deleteMany({
-  user: userId,
-  "metadata.comboId": new mongoose.Types.ObjectId(comboId)
-});
+      user: userId,
+      "metadata.comboId": new mongoose.Types.ObjectId(comboId)
+    });
 
-    // 7️⃣ Retornar usuario actualizado Full
+    /* ------------------ Retornar usuario actualizado ------------------ */
     const updatedUser = await UpdateFullUser(userId);
 
     return res.status(200).json({
@@ -242,10 +271,15 @@ export const deleteCombo = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: "Error eliminando combo", error: error.message });
+    console.error("deleteCombo error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error eliminando combo",
+      error: error.message
+    });
   }
 };
+
 
 /* ---------------------------- GET ALL ---------------------------- */
 

@@ -10,7 +10,10 @@ const UserSkillVariantSchema = new Schema(
       enum: [1, 2, 5],
       default: 5,
     },
-    video: { type: String, required: true },
+    video: {
+             url: { type: String, required: true },
+              publicId: { type: String, required: true },
+          },
     lastUpdated: { type: Date, default: Date.now } ,
     usedInCombos: {
       type: [

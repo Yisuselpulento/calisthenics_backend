@@ -1,7 +1,15 @@
 import cloudinary from "../config/cloudinary.js";
 
+/**
+ * 🔼 Subir archivo a Cloudinary
+ * @param {Object} file - archivo de multer (memoryStorage)
+ * @param {String} folder - carpeta en Cloudinary
+ * @returns {Promise<{ url: string, publicId: string, resourceType: "image" | "video" }>}
+ */
 export const uploadToCloudinary = (file, folder) => {
   return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error("No file provided"));
+
     const resourceType = file.mimetype.startsWith("video/")
       ? "video"
       : "image";
@@ -10,41 +18,39 @@ export const uploadToCloudinary = (file, folder) => {
       {
         folder,
         resource_type: resourceType,
+        type: "upload",
+        access_mode: "public",
       },
       (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
+        if (error) return reject(error);
+
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id,
+          resourceType: result.resource_type,
+        });
       }
     );
 
-    const buffer = Buffer.isBuffer(file.buffer)
-      ? file.buffer
-      : Buffer.from(file.buffer);
-
-    uploadStream.end(buffer);
+    uploadStream.end(file.buffer);
   });
 };
 
-export const deleteFromCloudinary = async (url) => {
-  if (!url) return;
+/**
+ * 🗑️ Eliminar archivo de Cloudinary usando public_id
+ * @param {String} publicId
+ * @param {"image" | "video"} resourceType
+ */
+export const deleteFromCloudinary = async (
+  publicId,
+  resourceType = "image"
+) => {
+  if (!publicId) return;
 
   try {
-    const parts = url.split("/");
-    const file = parts.pop();
-    const folder = parts.pop();
-    const publicId = `${folder}/${file.split(".")[0]}`;
-
- 
-    const isVideo =
-      url.includes("video") ||
-      file.endsWith(".mp4") ||
-      file.endsWith(".mov") ||
-      file.endsWith(".avi");
-
     await cloudinary.uploader.destroy(publicId, {
-      resource_type: isVideo ? "video" : "image",
+      resource_type: resourceType,
     });
-
   } catch (err) {
     console.error("Error eliminando archivo de Cloudinary:", err);
   }

@@ -61,8 +61,10 @@ const ComboSchema = new Schema(
       enum: ["static", "dynamic"],
       required: true,
     },
-    video: { type: String, required: true },
-
+   video: {
+        url: { type: String, required: true },
+        publicId: { type: String, required: true },
+      },
     elements: {
       type: [ComboElementSchema],
       validate: [

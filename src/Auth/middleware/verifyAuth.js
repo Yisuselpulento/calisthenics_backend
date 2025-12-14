@@ -1,23 +1,39 @@
 import jwt from "jsonwebtoken";
+import User from "../../models/user.model.js"
 
-export const verifyAuth = (req, res, next) => {
+export const verifyAuth = async (req, res, next) => {
+  const token = req.cookies.token;
 
-	const token = req.cookies.token;
-	if (!token) return res.status(401).json({ success: false, message:  "No autenticado. Token no proporcionado." });
-	try {
-		const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: "No autenticado. Token no proporcionado."
+    });
+  }
 
-		if (!decoded) return res.status(401).json({ success: false, message: "No autenticado. Token inválido." });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-		req.userId = decoded.userId;
-		req.isAdmin = decoded.isAdmin || false;
+    const user = await User.findById(decoded.userId)
+      .select("_id username isAdmin");
 
-		next();
-	} catch (error) {
-		if (error.name === "TokenExpiredError" || error.name === "JsonWebTokenError") {
-			return res.status(401).json({ success: false, message: "Token inválido o expirado" });
-		}
-		console.log("Error in verifyToken ", error);
-		return res.status(500).json({ success: false, message: "Error del servidor" });
-	}
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Usuario no encontrado"
+      });
+    }
+
+    // 🔥 AQUÍ está la clave
+    req.userId = user._id;
+    req.user = user;               
+    req.isAdmin = user.isAdmin;
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Token inválido o expirado"
+    });
+  }
 };
