@@ -12,13 +12,14 @@ const router = express.Router();
 
 router.put(
   "/update",
+  verifyAuth,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "videoProfile", maxCount: 1 },
   ]),
-  verifyAuth,
   updateProfile
 );
+
 
 router.put("/update/advanced", verifyAuth, limitProfileEdit, updateAdvancedProfile);
 

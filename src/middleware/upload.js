@@ -5,7 +5,7 @@ const storage = multer.memoryStorage();
 export const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, 
+    fileSize: 50 * 1024 * 1024, // 50MB
   },
   fileFilter(req, file, cb) {
     const isImage = file.mimetype.startsWith("image/");
@@ -14,7 +14,12 @@ export const upload = multer({
     if (isImage || isVideo) {
       cb(null, true);
     } else {
-      cb(new Error("Solo se permiten imágenes o videos"));
+      cb(
+        new multer.MulterError(
+          "LIMIT_UNEXPECTED_FILE",
+          "Solo se permiten imágenes o videos"
+        )
+      );
     }
   },
 });
