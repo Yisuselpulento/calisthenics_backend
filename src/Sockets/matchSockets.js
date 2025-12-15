@@ -4,12 +4,12 @@ import User from "../models/user.model.js";
 
 export const initMatchSockets = (io) => {
   io.on("connection", (socket) => {
-    console.log("⚡ Socket conectado:", socket.id);
+    console.log("⚡ Socket conectado:");
 
      socket.on("register", (userId) => {
       socket.userId = userId;
-      socket.join(userId); // 👈 MUY IMPORTANTE
-      console.log("👤 Usuario registrado en socket:", userId);
+      socket.join(userId);
+      console.log("👤 Usuario registrado en socket:");
     });
 
     /* ----------- ENVIAR DESAFÍO ----------- */
