@@ -111,16 +111,17 @@ export const addSkillVariant = async (req, res) => {
       userSkill.variants[userSkill.variants.length - 1];
 
     /* ------------------ Feed event ------------------ */
-    await createFeedEvent({
+     await createFeedEvent({
       userId,
       type: "NEW_SKILL",
       message: `agregó una nueva variante a su skill: ${variantKey} (${fingers} dedos)`,
       metadata: {
-        userSkillVariantId: newVariant._id,
+        userSkillId: userSkill._id,                 
+        userSkillVariantId: newVariant._id.toString(), 
         variantKey,
         fingers: Number(fingers),
-        videoUrl: uploadResult.url
-      }
+        videoUrl: uploadResult.url,
+      },
     });
 
     /* ------------------ Stats + user full ------------------ */
@@ -254,6 +255,24 @@ export const editSkillVariant = async (req, res) => {
     /* ------------------ Guardar cambios ------------------ */
     await userSkill.save();
 
+      await FeedEvent.findOneAndUpdate(
+        {
+          user: userId,
+          type: "NEW_SKILL",
+          "metadata.userSkillVariantId": userSkillVariantId,
+        },
+        {
+          $set: {
+            message: `actualizó una variante de su skill: ${variant.variantKey} (${variant.fingers} dedos)`,
+            "metadata.fingers": variant.fingers,
+            ...(uploadResult && {
+              "metadata.videoUrl": uploadResult.url,
+            }),
+          },
+        },
+        { new: true }
+      );
+
     const fullUser = await UpdateFullUser(userId);
 
     return res.json({
@@ -261,6 +280,7 @@ export const editSkillVariant = async (req, res) => {
       message: "Variante actualizada correctamente",
       user: fullUser
     });
+
 
   } catch (err) {
     // cleanup si falló después del upload
@@ -339,10 +359,11 @@ export const deleteSkillVariant = async (req, res) => {
       });
 
       await FeedEvent.deleteMany({
-        user: userId,
-        "metadata.skillId": userSkill.skill.toString()
-      });
-
+          user: userId,
+          type: "NEW_SKILL",
+          "metadata.userSkillVariantId": userSkillVariantId.toString(),
+        });
+        
       await getUserStats(userId);
       const fullUser = await UpdateFullUser(userId);
 
@@ -358,10 +379,10 @@ export const deleteSkillVariant = async (req, res) => {
     await getUserStats(userId);
 
     await FeedEvent.deleteMany({
-      user: userId,
-      "metadata.skillId": userSkill.skill.toString(),
-      "metadata.userSkillVariantId": userSkillVariantId
-    });
+        user: userId,
+        type: "NEW_SKILL",
+        "metadata.userSkillVariantId": userSkillVariantId.toString(),
+      });
 
     await Combo.updateMany(
       { user: userId },
