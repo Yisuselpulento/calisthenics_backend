@@ -51,6 +51,7 @@ const ChallengeSchema = new Schema(
       fromUser: Number,
       toUser: Number,
     },
+    matchId: { type: Schema.Types.ObjectId, ref: "Match", default: null },
   },
   { timestamps: true }
 );

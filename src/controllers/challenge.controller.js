@@ -204,6 +204,10 @@ export const respondChallenge = async (req, res) => {
 
      if (accepted) {
       matchResult = await MatchService.createMatchFromChallenge(challenge);
+
+
+      challenge.matchId = matchResult.match._id;
+
       challenge.status = "completed";
     }
 

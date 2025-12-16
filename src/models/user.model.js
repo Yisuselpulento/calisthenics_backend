@@ -196,7 +196,7 @@ videoProfile: {
 );
 
 UserSchema.methods.updateTier = function () {
-  const p = this.ranking.points;
+  const p = this.ranking.elo;
 
   if (p < 1000) this.ranking.tier = "Bronze";
   else if (p < 1500) this.ranking.tier = "Silver";

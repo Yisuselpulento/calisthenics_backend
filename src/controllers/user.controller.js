@@ -32,3 +32,49 @@ export const searchUsers = async (req, res) => {
     });
   }
 };
+
+export const getRankedLeaderboard = async (req, res) => {
+  try {
+    const currentUserId = req.userId;
+
+    // 🔥 Top 100
+    const leaderboard = await User.find({})
+      .sort({ "ranking.elo": -1 })
+      .select(
+        "username fullName avatar ranking.elo ranking.tier ranking.wins ranking.losses"
+      )
+      .limit(100);
+
+    // 🔢 Usuario actual
+    const me = await User.findById(currentUserId).select(
+      "username fullName avatar ranking.elo ranking.tier ranking.wins ranking.losses"
+    );
+    
+    const myRank =
+      me
+        ? (await User.countDocuments({
+            "ranking.elo": { $gt: me.ranking.elo },
+          })) + 1
+        : null;
+
+    return res.status(200).json({
+      success: true,
+      message: "Leaderboard ranked",
+      data: {
+        leaderboard,
+        me: me
+          ? {
+              ...me.toObject(),
+              rank: myRank,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("Error getRankedLeaderboard:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
