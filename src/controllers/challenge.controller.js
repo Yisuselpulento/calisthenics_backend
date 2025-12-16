@@ -92,20 +92,26 @@ export const createChallenge = async (req, res) => {
   actions: ["accept", "reject"],
 });
 
-    await User.updateMany(
-  { _id: { $in: [fromUserId, toUserId] } },
-  {
-    hasPendingChallenge: true,
-    pendingChallenge: challenge._id,
-    lastChallengeAt: new Date(),
-  }
-);
+        await User.updateOne(
+        { _id: toUserId },
+        {
+          hasPendingChallenge: true,
+          pendingChallenge: challenge._id,
+          lastChallengeAt: new Date(),
+          $inc: { notificationsCount: 1 },
+          $push: { notifications: notification._id },
+        }
+      );
 
-// Agregar notificación solo al receptor
-await User.findByIdAndUpdate(toUserId, {
-  $inc: { notificationsCount: 1 },
-  $push: { notifications: notification._id },
-});
+      // 👤 Usuario que envía (sin notificación)
+      await User.updateOne(
+        { _id: fromUserId },
+        {
+          hasPendingChallenge: true,
+          pendingChallenge: challenge._id,
+          lastChallengeAt: new Date(),
+        }
+      );
 
     // 🔔 Notificar al usuario receptor
         const io = getIO();
@@ -128,15 +134,24 @@ await User.findByIdAndUpdate(toUserId, {
     await Notification.deleteMany({ challenge: challenge._id });
 
     // Resetear pendingChallenge en ambos usuarios
-   await User.updateMany(
-      { _id: { $in: [fromUserId, toUserId] } },
-      {
-        hasPendingChallenge: false,
-        pendingChallenge: null,
-        $pull: { notifications: challenge._id },
-        $inc: { notificationsCount: -1 } 
-      }
-    );
+          await User.updateOne(
+          { _id: toUserId },
+          {
+            hasPendingChallenge: false,
+            pendingChallenge: null,
+            $pull: { notifications: notification._id },
+            $inc: { notificationsCount: -1 },
+          }
+        );
+
+        // emisor
+        await User.updateOne(
+          { _id: fromUserId },
+          {
+            hasPendingChallenge: false,
+            pendingChallenge: null,
+          }
+        );
 
     // 🔔 Notificar al usuario que envió el desafío
     emitToUser(io, fromUserId, "challengeExpired", {
@@ -214,15 +229,25 @@ export const respondChallenge = async (req, res) => {
     await challenge.save();
 
    await Notification.deleteMany({ challenge: challenge._id });
-    await User.updateMany(
-      { _id: { $in: [challenge.fromUser, challenge.toUser] } },
-      {
-        $pull: { notifications: challenge._id },
-        hasPendingChallenge: false,
-        pendingChallenge: null,
-        $inc: { notificationsCount: -1 } 
-      }
-    );
+    
+   await User.updateOne(
+  { _id: challenge.toUser },
+  {
+    hasPendingChallenge: false,
+    pendingChallenge: null,
+    $pull: { notifications: challenge._id },
+    $inc: { notificationsCount: -1 },
+  }
+);
+
+// 👤 emisor (nunca tuvo notificación)
+await User.updateOne(
+  { _id: challenge.fromUser },
+  {
+    hasPendingChallenge: false,
+    pendingChallenge: null,
+  }
+);
 
     const io = getIO();
 
@@ -282,13 +307,23 @@ export const cancelChallenge = async (req, res) => {
     await challenge.save();
 
      await Notification.deleteMany({ challenge: challenge._id });
-      await User.updateMany(
-        { _id: { $in: [challenge.fromUser, challenge.toUser] } },
+      
+     await User.updateOne(
+        { _id: challenge.toUser },
         {
-          $pull: { notifications: challenge._id },
           hasPendingChallenge: false,
           pendingChallenge: null,
-          $inc: { notificationsCount: -1 } 
+          $pull: { notifications: challenge._id },
+          $inc: { notificationsCount: -1 },
+        }
+      );
+
+      // 👤 emisor
+      await User.updateOne(
+        { _id: challenge.fromUser },
+        {
+          hasPendingChallenge: false,
+          pendingChallenge: null,
         }
       );
 
