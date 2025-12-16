@@ -107,8 +107,6 @@ export const signup = async (req, res) => {
 
         //await sendVerificationEmail(user.email, user.fullName, verificationToken);
 
-        generateTokenAndSetCookie(res, user);
-
         const fullUser = await UpdateFullUser(user._id);
 
             return res.status(201).json({
