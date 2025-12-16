@@ -1,140 +1,74 @@
+import Match from "../models/match.model.js";
 import User from "../models/user.model.js";
 import Combo from "../models/combo.model.js";
-import UserSkill from "../models/userSkill.model.js";
 import { calculateComboPointsStepByStep } from "../utils/calculateComboStats.js";
+import { populateComboWithFingers } from "../utils/populateComboWithFingers.js";
 
-const populateComboWithFingers = async (combo) => {
-  const elementsWithFingers = await Promise.all(
-    combo.elements.map(async (el) => {
-      // Buscar la variante correspondiente en UserSkill
-      const userSkill = await UserSkill.findOne(
-        { "variants._id": el.userSkillVariantId },
-        { "variants.$": 1 } // traer solo la variante que necesitamos
-      ).lean();
+export const getMatchByIdController = async (req, res) => {
+  const { matchId } = req.params;
 
-      let fingers = 5; // valor por defecto
-      if (userSkill?.variants?.length > 0) {
-        fingers = userSkill.variants[0].fingers;
+  try {
+    const match = await Match.findById(matchId)
+      .populate("playerData.user", "username avatar")
+      .populate("playerData.combo");
+
+    if (!match) return res.status(404).json({ success: false, message: "Match no encontrado" });
+
+    const [playerAData, playerBData] = match.playerData;
+
+    const getPlayerResult = async (player) => {
+      let combo = player.combo;
+      let result;
+
+      if (player.breakdown?.elementsStepData) {
+        result = {
+          totalPoints: player.points,
+          stepData: player.breakdown.elementsStepData,
+          energySpent: player.energySpent,
+        };
+      } else if (combo) {
+        // Solo recalcular si no existe breakdown
+        const populatedCombo = await populateComboWithFingers(await Combo.findById(combo));
+        const calculation = calculateComboPointsStepByStep(populatedCombo.elements, player.user.stats?.energy || 0);
+        combo = populatedCombo;
+        result = {
+          totalPoints: calculation.totalPoints,
+          stepData: calculation.elementsStepData,
+          energySpent: player.energySpent || 0,
+        };
+      } else {
+        result = { totalPoints: 0, stepData: [], energySpent: 0 };
       }
 
       return {
-        ...el.toObject(), // todo lo que ya tenía el elemento
-        fingers,         // agregar solo fingers
+        combo,
+        totalPoints: result.totalPoints,
+        stepData: result.stepData,
+        energySpent: result.energySpent,
+        isWinner: match.winner?.toString() === player.user._id.toString(),
+        playerName: player.user.username,
+        user: player.user,
       };
-    })
-  );
+    };
 
-  return {
-    ...combo.toObject(),
-    elements: elementsWithFingers,
-  };
-};
-
-export const doMatch = async (req, res) => {
-  try {
-    const userAId = req.userId;
-    const { opponentId, type, matchType = "casual" } = req.body;
-
-    /* ----------------------------------------
-     * 1️⃣ Validar datos del body
-     * ---------------------------------------- */
-    if (!opponentId || !type) {
-      return res.status(400).json({
-        success: false,
-        message: "Faltan datos: opponentId y type son requeridos.",
-      });
-    }
-
-    /* ----------------------------------------
-     * 2️⃣ Validar existencia de los usuarios
-     * ---------------------------------------- */
-    const [userA, userB] = await Promise.all([
-      User.findById(userAId),
-      User.findById(opponentId),
+    const [user, opponent] = await Promise.all([
+      getPlayerResult(playerAData),
+      getPlayerResult(playerBData),
     ]);
 
-    if (!userA) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario que inicia el match no existe.",
-      });
-    }
-
-    if (!userB) {
-      return res.status(404).json({
-        success: false,
-        message: "El usuario oponente no existe.",
-      });
-    }
-
-    /* ----------------------------------------
-     * 3️⃣ Validar que ambos tengan combo favorito del tipo indicado
-     * ---------------------------------------- */
-    const userAFavoriteComboId = userA.favoriteCombos?.[type] || null;
-    const userBFavoriteComboId = userB.favoriteCombos?.[type] || null;
-
-    if (!userAFavoriteComboId) {
-      return res.status(400).json({
-        success: false,
-        message: `El usuario no tiene un combo favorito de tipo ${type}.`,
-      });
-    }
-
-    if (!userBFavoriteComboId) {
-      return res.status(400).json({
-        success: false,
-        message: `El oponente no tiene un combo favorito de tipo ${type}.`,
-      });
-    }
-
-    /* ----------------------------------------
-     * 4️⃣ Obtener combos completos
-     * ---------------------------------------- */
-    const [userAComboRaw, userBComboRaw] = await Promise.all([
-      Combo.findById(userAFavoriteComboId).populate("user", "username avatar"),
-      Combo.findById(userBFavoriteComboId).populate("user", "username avatar"),
-    ]);
-
-    if (!userAComboRaw || !userBComboRaw) {
-      return res.status(404).json({
-        success: false,
-        message: "No se encontraron los combos favoritos.",
-      });
-    }
-
-    /* ----------------------------------------
-     * 5️⃣ Completar combos con fingers
-     * ---------------------------------------- */
-    const [userACombo, userBCombo] = await Promise.all([
-      populateComboWithFingers(userAComboRaw),
-      populateComboWithFingers(userBComboRaw),
-    ]);
-
-    /* ----------------------------------------
-     * 6️⃣ Calcular puntos
-     * ---------------------------------------- */
-    const userAResult = calculateComboPointsStepByStep(userACombo.elements, userA.stats.energy);
-    const userBResult = calculateComboPointsStepByStep(userBCombo.elements, userB.stats.energy);
-
-    const userAWinner = userAResult.totalPoints >= userBResult.totalPoints;
-    const userBWinner = !userAWinner;
-
-    /* ----------------------------------------
-     * 7️⃣ Respuesta final
-     * ---------------------------------------- */
-    return res.status(200).json({
+    res.json({
       success: true,
-      userCombo: userACombo,
-      opponentCombo: userBCombo,
-      userAResult: { ...userAResult, isWinner: userAWinner },
-      userBResult: { ...userBResult, isWinner: userBWinner },
+      match: {
+        user,
+        opponent,
+        mode: match.mode,
+        matchType: match.matchType,
+        totalPointsDiff: match.points,
+      },
     });
 
   } catch (error) {
-    console.error("❌ Error en doMatch:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error interno del servidor.",
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };

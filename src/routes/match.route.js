@@ -1,9 +1,9 @@
 import express from "express";
-import { doMatch } from "../controllers/match.controller.js";
+import { getMatchByIdController } from "../controllers/match.controller.js";
 import { verifyAuth } from "../Auth/middleware/verifyAuth.js";
 
 const router = express.Router();
 
-router.post("/", verifyAuth, doMatch);
+router.get("/:matchId", verifyAuth, getMatchByIdController);
 
 export default router;

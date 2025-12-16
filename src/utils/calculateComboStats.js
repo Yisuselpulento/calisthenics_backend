@@ -59,7 +59,7 @@ export const calculateComboPointsStepByStep = (elements, userEnergy = 1000) => {
 
   return {
     totalPoints,
-    energy: userEnergy,
+    totalEnergy: userEnergy,
     elementsStepData,
   };
 };

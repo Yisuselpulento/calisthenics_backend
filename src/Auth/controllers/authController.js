@@ -345,7 +345,7 @@ export const checkAuth = async (req, res) => {
 
     const user = await User.findById(req.userId)
       .select(
-        "_id username fullName email videoProfile avatar gender notifications isAdmin isVerified profileType country altura peso notificationsCount ranking followers following favoriteCombos"
+        "_id username fullName email videoProfile avatar gender notifications isAdmin isVerified profileType country altura peso notificationsCount ranking followers following favoriteCombos pendingChallenge hasPendingChallenge"
       )
        .populate({
         path: "favoriteCombos.static",

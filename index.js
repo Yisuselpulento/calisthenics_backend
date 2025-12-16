@@ -1,13 +1,14 @@
 import "dotenv/config";
 
 import http from "http";
-import express from "express"
+import express from "express";
 import cookieParser from "cookie-parser";
-import cors from "cors"
+import cors from "cors";
 import { connectDB } from "./src/db/connectDB.js";
-import authRoutes from "./src/Auth/routes/auth.route.js" 
-import skillAdminRoutes from "./src/routes/skillAdmin.route.js"
-import updateProfile from "./src/routes/profile.route.js"
+
+import authRoutes from "./src/Auth/routes/auth.route.js";
+import skillAdminRoutes from "./src/routes/skillAdmin.route.js";
+import updateProfile from "./src/routes/profile.route.js";
 import userSkillRoutes from "./src/routes/userSkills.route.js";
 import comboRoutes from "./src/routes/combo.route.js";
 import userFollowRoutes from "./src/routes/userFollow.route.js";
@@ -16,18 +17,23 @@ import notificationRoutes from "./src/routes/notification.route.js";
 import userRoutes from "./src/routes/user.route.js";
 import feedRoutes from "./src/routes/feed.route.js";
 import matchRoutes from "./src/routes/match.route.js";
+import challengeRoutes from "./src/routes/challenge.route.js";
 
+import { setIO } from "./src/Sockets/io.js";
 import { initMatchSockets } from "./src/Sockets/matchSockets.js";
 
-const app = express()
-const PORT = process.env.PORT || 5000
+import { Server } from "socket.io";
 
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// -------------------- Middleware --------------------
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
 
-app.use(express.json())
-app.use(cookieParser())
-
-app.use("/api/auth", authRoutes)
+// -------------------- Rutas --------------------
+app.use("/api/auth", authRoutes);
 app.use("/api/profile", updateProfile);
 app.use("/api/skills", skillAdminRoutes);
 app.use("/api/user-skills", userSkillRoutes);
@@ -37,12 +43,13 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/feed", feedRoutes);
-app.use("/api/match", matchRoutes)
+app.use("/api/match", matchRoutes);
+app.use("/api/challenge", challengeRoutes);
 
+// -------------------- Servidor HTTP --------------------
 const server = http.createServer(app);
 
-
-import { Server } from "socket.io";
+// -------------------- Socket.IO --------------------
 const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL,
@@ -51,10 +58,13 @@ const io = new Server(server, {
   },
 });
 
-// Pasamos el objeto io a tu función para manejar eventos
+// Guardamos la instancia de io globalmente
+setIO(io);
+
+// Inicializamos listeners y eventos
 initMatchSockets(io);
 
-// Conectar MongoDB y levantar servidor
+// -------------------- Conexión MongoDB y Levantar Servidor --------------------
 connectDB()
   .then(() => {
     server.listen(PORT, () => {

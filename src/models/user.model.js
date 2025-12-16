@@ -160,11 +160,26 @@ videoProfile: {
     /* ---------------------- RANKING SYSTEM ---------------------- */
 
     ranking: {
-        points: { type: Number, default: 1000 }, 
-        tier: { type: String, default: "Bronze" },
-        wins: { type: Number, default: 0 },
-        losses: { type: Number, default: 0 },
-      },
+      elo: { type: Number, default: 1000 },
+      tier: { type: String, default: "Bronze" },
+      wins: { type: Number, default: 0 },
+      losses: { type: Number, default: 0 },
+    },
+    pendingChallenge: {
+      type: Schema.Types.ObjectId,
+      ref: "Challenge",
+      default: null,
+    },
+
+     hasPendingChallenge: {
+      type: Boolean,
+      default: false,
+    },
+
+    lastChallengeAt: {
+      type: Date,
+      default: null,
+    },
 
     /* ---------------------- NOTIFICATIONS ---------------------- */
 

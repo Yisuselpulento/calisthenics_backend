@@ -26,13 +26,15 @@ const NotificationSchema = new Schema(
         "new_skill",
         "new_combo",
         "team_invite",
+        "challenge",
         "system",
       ],
       required: true,
     },
 
-    challengeId: {
-      type: String,
+    challenge: {
+      type: Schema.Types.ObjectId,
+      ref: "Challenge",
       default: null,
     },
 
