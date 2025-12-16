@@ -128,9 +128,14 @@ await User.findByIdAndUpdate(toUserId, {
     await Notification.deleteMany({ challenge: challenge._id });
 
     // Resetear pendingChallenge en ambos usuarios
-    await User.updateMany(
+   await User.updateMany(
       { _id: { $in: [fromUserId, toUserId] } },
-      { hasPendingChallenge: false, pendingChallenge: null }
+      {
+        hasPendingChallenge: false,
+        pendingChallenge: null,
+        $pull: { notifications: challenge._id },
+        $inc: { notificationsCount: -1 } 
+      }
     );
 
     // 🔔 Notificar al usuario que envió el desafío
@@ -211,6 +216,7 @@ export const respondChallenge = async (req, res) => {
         $pull: { notifications: challenge._id },
         hasPendingChallenge: false,
         pendingChallenge: null,
+        $inc: { notificationsCount: -1 } 
       }
     );
 
@@ -278,6 +284,7 @@ export const cancelChallenge = async (req, res) => {
           $pull: { notifications: challenge._id },
           hasPendingChallenge: false,
           pendingChallenge: null,
+          $inc: { notificationsCount: -1 } 
         }
       );
 

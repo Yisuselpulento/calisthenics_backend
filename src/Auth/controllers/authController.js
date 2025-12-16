@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import crypto from "crypto"
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import { UpdateFullUser } from "../../utils/updateFullUser.js";
+import { getAuthUser } from "../../utils/getAuthUser.js";
 
 const LOCK_TIME = 15 * 60 * 1000; 
 const MAX_ATTEMPTS = 5;
@@ -343,34 +344,7 @@ export const checkAuth = async (req, res) => {
         .json({ success: false, message: "No autenticado" });
     }
 
-    const user = await User.findById(req.userId)
-      .select(
-        "_id username fullName email videoProfile avatar gender notifications isAdmin isVerified profileType country altura peso notificationsCount ranking followers following favoriteCombos pendingChallenge hasPendingChallenge"
-      )
-       .populate({
-        path: "favoriteCombos.static",
-        select: "name type fingers energyPerSecond energyPerRep",
-      })
-      .populate({
-        path: "favoriteCombos.dynamic",
-        select: "name type fingers energyPerSecond energyPerRep",
-      })
-      .populate({
-        path: "notifications",
-        select: "type message read createdAt fromUser relatedSkill relatedCombo relatedTeam",
-        options: { sort: { createdAt: -1 }, limit: 5 },
-        populate: { path: "fromUser", select: "username fullName avatar" },
-      })
-      .populate({
-        path: "followers",
-        select: "username fullName avatar",
-        options: { limit: 10 }, // puedes limitar si quieres
-      })
-      .populate({
-        path: "following",
-        select: "username fullName avatar",
-        options: { limit: 10 }, // puedes limitar si quieres
-      });
+    const user = await getAuthUser(req.userId);
 
     if (!user) {
       return res
