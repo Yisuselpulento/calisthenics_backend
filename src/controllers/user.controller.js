@@ -25,11 +25,8 @@ export const searchUsers = async (req, res) => {
       data: users,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    console.error("Error searching user:", error);
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -72,9 +69,6 @@ export const getRankedLeaderboard = async (req, res) => {
     });
   } catch (error) {
     console.error("Error getRankedLeaderboard:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };

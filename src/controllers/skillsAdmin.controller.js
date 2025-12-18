@@ -6,37 +6,60 @@ export const createSkill = async (req, res) => {
     const { name, skillKey, difficulty } = req.body;
 
     if (!name || !skillKey) {
-      return res.status(400).json({ message: "name y skillKey son requeridos." });
+      return res.status(400).json({
+        success: false,
+        message: "name y skillKey son requeridos.",
+      });
     }
 
-    // validar difficulty
     const allowedDifficulties = ["easy", "medium", "hard"];
     if (difficulty && !allowedDifficulties.includes(difficulty)) {
-      return res.status(400).json({ message: "difficulty inválido." });
+      return res.status(400).json({
+        success: false,
+        message: "difficulty inválido.",
+      });
     }
 
-    // validar que la key no exista
     const keyExists = await Skill.findOne({ skillKey });
     if (keyExists) {
-      return res.status(400).json({ message: "skillKey ya está en uso." });
+      return res.status(400).json({
+        success: false,
+        message: "skillKey ya está en uso.",
+      });
     }
 
     const skill = await Skill.create({ name, skillKey, difficulty });
 
-    res.status(201).json(skill);
+    return res.status(201).json({
+      success: true,
+      message: "Skill creada correctamente.",
+      data: skill,
+    });
   } catch (error) {
     console.error("Error creating skill:", error);
-    res.status(500).json({ message: "Error interno del servidor." });
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
+
 
 
 export const getAllSkills = async (req, res) => {
   try {
     const skills = await Skill.find();
-    res.json(skills);
+
+    return res.json({
+      success: true,
+      data: skills,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error al obtener skills." });
+    console.error("Error get all skills:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
 
@@ -49,14 +72,25 @@ export const getSkillByKey = async (req, res) => {
     const skill = await Skill.findOne({ skillKey });
 
     if (!skill) {
-      return res.status(404).json({ message: "Skill no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Skill no encontrada.",
+      });
     }
 
-    res.json(skill);
+    return res.json({
+      success: true,
+      data: skill,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error al obtener skill." });
+    console.error("Error get by key:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
+
 
 
 
@@ -67,13 +101,19 @@ export const updateSkill = async (req, res) => {
 
     const allowedDifficulties = ["easy", "medium", "hard"];
     if (difficulty && !allowedDifficulties.includes(difficulty)) {
-      return res.status(400).json({ message: "difficulty inválido." });
+      return res.status(400).json({
+        success: false,
+        message: "difficulty inválido.",
+      });
     }
 
     const skill = await Skill.findOne({ skillKey });
 
     if (!skill) {
-      return res.status(404).json({ message: "Skill no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Skill no encontrada.",
+      });
     }
 
     if (name) skill.name = name;
@@ -81,11 +121,20 @@ export const updateSkill = async (req, res) => {
 
     await skill.save();
 
-    res.json(skill);
+    return res.json({
+      success: true,
+      message: "Skill actualizada correctamente.",
+      data: skill,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error actualizando skill." });
+    console.error("Error update skill:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
+
 
 
 export const deleteSkill = async (req, res) => {
@@ -95,11 +144,22 @@ export const deleteSkill = async (req, res) => {
     const skill = await Skill.findOneAndDelete({ skillKey });
 
     if (!skill) {
-      return res.status(404).json({ message: "Skill no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Skill no encontrada.",
+      });
     }
 
-    res.json({ message: "Skill eliminada correctamente." });
+    return res.json({
+      success: true,
+      message: "Skill eliminada correctamente.",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error eliminando skill." });
+    console.error("Error delete skill", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
+

@@ -17,7 +17,8 @@ export const getProfileByUsername = async (req, res) => {
     res.json({ success: true, user: fullUser });
 
   } catch (err) {
-    res.status(500).json({ success: false, message: "Error interno del servidor" });
+     console.error("getProfile by username error:", err);
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -31,13 +32,20 @@ export const updateProfile = async (req, res) => {
     const { peso, altura, country } = req.body;
 
     if (!req.user?.username) {
-      throw new Error("Username no disponible para subir archivos");
-    }
+  return res.status(400).json({
+    success: false,
+    message: "Username no disponible para subir archivos",
+  });
+}
 
     const user = await User.findById(userId);
+    
     if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
+  return res.status(404).json({
+    success: false,
+    message: "Usuario no encontrado",
+  });
+}
 
     const updates = {};
 
@@ -128,17 +136,14 @@ export const updateProfile = async (req, res) => {
     });
 
   } catch (error) {
-    // cleanup si algo falla después del upload
     if (avatarUpload?.publicId) {
       await deleteFromCloudinary(avatarUpload.publicId, "image");
     }
-
     if (videoUpload?.publicId) {
       await deleteFromCloudinary(videoUpload.publicId, "video");
     }
-
     console.error("updateProfile error:", error);
-    return res.status(500).json({ message: "Error del servidor" });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -235,9 +240,6 @@ export const updateAdvancedProfile = async (req, res) => {
 
   } catch (error) {
     console.error("updateAdvancedProfile:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };

@@ -18,7 +18,12 @@ export const addSkillVariant = async (req, res) => {
     const userId = req.userId;
     const { skillId, variantKey, fingers = 5 } = req.body;
 
-    if (!req.user?.username) { throw new Error("Username no disponible para subir archivos"); }
+    if (!req.user?.username) {
+  return res.status(400).json({
+    success: false,
+    message: "No se pudo obtener el usuario para subir el archivo",
+      });
+    }
 
     /* ------------------ Validaciones básicas ------------------ */
     if (!skillId || !variantKey || ![1, 2, 5].includes(Number(fingers))) {
@@ -140,10 +145,7 @@ export const addSkillVariant = async (req, res) => {
     }
 
     console.error("addSkillVariant:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Error del servidor"
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -157,9 +159,13 @@ export const editSkillVariant = async (req, res) => {
     const { userSkillVariantId } = req.params;
     const { newFingers } = req.body;
 
-    if (!req.user?.username) {
-  throw new Error("Username no disponible para subir archivos");
-}
+   if (!req.user?.username) {
+  return res.status(400).json({
+        success: false,
+        message: "No se pudo obtener el usuario para subir el archivo",
+      });
+    }
+
 
     if (!userSkillVariantId) {
       return res.status(400).json({
@@ -292,10 +298,7 @@ export const editSkillVariant = async (req, res) => {
     }
 
     console.error("editSkillVariant:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Error del servidor"
-    });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -399,10 +402,7 @@ export const deleteSkillVariant = async (req, res) => {
 
   } catch (err) {
     console.error("deleteSkillVariant:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -440,14 +440,22 @@ export const toggleFavoriteSkill = async (req, res) => {
       return res.status(404).json({ success: false, message: "Variante no encontrada en tu perfil" });
     }
 
-    // 2. Obtener la variante
-    const variant = userSkill.variants.find(v => v._id.toString() === userSkillVariantId);
+      const variant = userSkill.variants.find(
+      (v) => v._id.toString() === userSkillVariantId
+    );
 
     if (!variant) {
       return res.status(404).json({ success: false, message: "Variante no encontrada dentro de tu skill" });
     }
 
     const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado"
+      });
+    }
 
     // 3. Verificar si ya es favorita
     const isFavorite = user.favoriteSkills.some(
@@ -495,7 +503,7 @@ export const toggleFavoriteSkill = async (req, res) => {
 
   } catch (err) {
     console.error("toggleFavoriteSkill:", err);
-    res.status(500).json({ success: false, message: "Error del servidor" });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -541,7 +549,7 @@ export const getFavoriteSkills = async (req, res) => {
     });
   } catch (err) {
     console.error("getFavoriteSkills ERROR:", err);
-    res.status(500).json({ success: false, message: "Error del servidor" });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -573,6 +581,13 @@ export const getUserSkillVariantById = async (req, res) => {
     const userVariant = userSkill.variants.find(
       (v) => v._id.toString() === userSkillVariantId
     );
+
+    if (!userVariant) {
+  return res.status(404).json({
+    success: false,
+    message: "Variante no encontrada",
+  });
+}
 
     // Extraer info de la Skill si existe la variante correspondiente
     const skillVariant = userSkill.skill.variants.find(
@@ -616,10 +631,7 @@ export const getUserSkillVariantById = async (req, res) => {
     return res.json({ success: true, variant: variantData });
   } catch (err) {
     console.error("getUserSkillVariantById:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 

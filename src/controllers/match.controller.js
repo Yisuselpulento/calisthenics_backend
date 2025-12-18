@@ -68,7 +68,7 @@ export const getMatchByIdController = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Error del servidor" });
+    console.error("error in get by id" , error);
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };

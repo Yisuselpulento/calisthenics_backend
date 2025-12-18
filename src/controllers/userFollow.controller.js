@@ -13,8 +13,8 @@ export const getFollowers = async (req, res) => {
 
     res.status(200).json({ success: true, followers: user.followers });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Error al obtener followers." });
+   console.error("Error get follower:", error);
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -28,8 +28,8 @@ export const getFollowing = async (req, res) => {
 
     res.status(200).json({ success: true, following: user.following });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Error al obtener following." });
+    console.error("Error get following:", error);
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -53,13 +53,16 @@ export const toggleFollow = async (req, res) => {
     const isFollowing = currentUser.following.includes(userToFollow._id);
 
     if (isFollowing) {
-      // Dejar de seguir
-      currentUser.following.pull(userToFollow._id);
-      userToFollow.followers.pull(currentUser._id);
-    } else {
-      // Seguir
-      currentUser.following.push(userToFollow._id);
-      userToFollow.followers.push(currentUser._id);
+        currentUser.following.pull(userToFollow._id);
+        userToFollow.followers.pull(currentUser._id);
+      } else {
+        if (!currentUser.following.includes(userToFollow._id)) {
+          currentUser.following.push(userToFollow._id);
+        }
+
+        if (!userToFollow.followers.includes(currentUser._id)) {
+          userToFollow.followers.push(currentUser._id);
+        }
 
       // ---------------------- CREAR NOTIFICACIÓN ----------------------
       const message = `${currentUser.username} ha comenzado a seguirte.`;
@@ -86,7 +89,7 @@ export const toggleFollow = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Error al seguir/dejar de seguir al usuario." });
+    console.error("Error toggle follow:", error);
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };

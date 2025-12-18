@@ -20,7 +20,7 @@ export const getUserNotifications = async (req, res) => {
     res.status(200).json({ success: true, notifications });
   } catch (error) {
     console.error("getUserNotifications:", error);
-    res.status(500).json({ success: false, message: "Error al obtener notificaciones." });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -48,7 +48,7 @@ export const markNotificationAsRead = async (req, res) => {
         });
   } catch (error) {
     console.error("markNotificationAsRead:", error);
-    res.status(500).json({ success: false, message: "Error al marcar notificación como leída." });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -71,6 +71,6 @@ export const markAllNotificationsAsRead = async (req, res) => {
       });
   } catch (error) {
     console.error("markAllNotificationsAsRead:", error);
-    res.status(500).json({ success: false, message: "Error al marcar todas las notificaciones como leídas." });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };

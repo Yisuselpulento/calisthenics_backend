@@ -38,7 +38,7 @@ export const getAllReports = async (req, res) => {
     res.status(200).json({ success: true, reports });
   } catch (error) {
     console.error("Error obteniendo reportes:", error);
-    res.status(500).json({ success: false, message: "Error al obtener reportes." });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -59,7 +59,7 @@ export const getReportById = async (req, res) => {
     res.status(200).json({ success: true, report });
   } catch (error) {
     console.error("Error obteniendo reporte:", error);
-    res.status(500).json({ success: false, message: "Error al obtener reporte." });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -81,6 +81,6 @@ export const updateReportStatus = async (req, res) => {
     res.status(200).json({ success: true, message: "Reporte actualizado exitosamente.", report });
   } catch (error) {
     console.error("Error actualizando reporte:", error);
-    res.status(500).json({ success: false, message: "Error al actualizar reporte." });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
