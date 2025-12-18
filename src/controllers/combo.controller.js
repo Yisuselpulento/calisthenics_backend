@@ -20,111 +20,177 @@ export const createCombo = async (req, res) => {
     const userId = req.userId;
     const { name, type, elements } = req.body;
 
+    /* ------------------ Auth ------------------ */
     if (!req.user?.username) {
-  throw new Error("Username no disponible para subir archivos");
-}
+      return res.status(400).json({
+        success: false,
+        message: "No se pudo identificar el usuario",
+      });
+    }
 
-    // Validaciones básicas
+    /* ------------------ Validaciones básicas ------------------ */
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "Debes subir un video para tu combo." });
+      return res.status(400).json({
+        success: false,
+        message: "Debes subir un video para tu combo",
+      });
     }
 
     if (!["static", "dynamic"].includes(type)) {
-      return res.status(400).json({ success: false, message: "Tipo de combo inválido." });
+      return res.status(400).json({
+        success: false,
+        message: "Tipo de combo inválido",
+      });
     }
 
     const parsedElements = JSON.parse(elements);
 
     if (parsedElements.length < 3 || parsedElements.length > 10) {
-      return res.status(400).json({ success: false, message: "Un combo debe tener entre 3 y 10 variantes." });
+      return res.status(400).json({
+        success: false,
+        message: "Un combo debe tener entre 3 y 10 variantes",
+      });
     }
 
-    // Traer usuario con skills
-    const user = await User.findById(userId)
-      .populate({
-        path: "skills",
-        populate: { path: "skill", model: "Skill" }
+    /* ------------------ Usuario ------------------ */
+    const user = await User.findById(userId).populate({
+      path: "skills",
+      populate: { path: "skill", model: "Skill" },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
       });
+    }
 
-    if (!user) throw new Error("Usuario no encontrado");
-
+    /* ------------------ Validar y construir elementos ------------------ */
     let totalEnergyCost = 0;
+    const seenVariants = new Set();
+    const comboElements = [];
 
-      const seenVariants = new Set();
-    // Validar cada variante usando userSkillVariantId
-    const comboElements = parsedElements.map(el => {
-      const userSkillVariantId = el.userSkillVariantId;
+    for (const el of parsedElements) {
+      const { userSkillVariantId } = el;
 
-       if (seenVariants.has(userSkillVariantId)) {
-        throw new Error(`No puedes usar la misma variante más de una vez en un combo.`);
+      if (seenVariants.has(userSkillVariantId)) {
+        return res.status(400).json({
+          success: false,
+          message: "No puedes repetir una variante en el mismo combo",
+        });
       }
       seenVariants.add(userSkillVariantId);
 
-      let foundVariant = null;
       let foundUserSkill = null;
+      let foundVariant = null;
 
       for (const s of user.skills) {
-        const uv = s.variants.find(v => String(v._id) === String(userSkillVariantId));
+        const uv = s.variants.find(
+          v => String(v._id) === String(userSkillVariantId)
+        );
         if (uv) {
-          foundVariant = uv;
           foundUserSkill = s;
+          foundVariant = uv;
           break;
         }
       }
 
-      if (!foundVariant || !foundUserSkill) throw new Error("Variante no encontrada");
-
-      // Buscar stats de la variante en la skill base
-      const skillVariant = foundUserSkill.skill.variants.find(v => v.variantKey === foundVariant.variantKey);
-      if (!skillVariant) throw new Error("Stats de la variante no encontradas");
-
-      // Validar tipo de variante según tipo de combo
-      if (type === "static" && !["static", "basic"].includes(skillVariant.type)) {
-        throw new Error(`No puedes usar variantes dinámicas en un combo estático.`);
-      }
-      if (type === "dynamic" && !["dynamic", "basic"].includes(skillVariant.type)) {
-        throw new Error(`No puedes usar variantes estáticas en un combo dinámico.`);
+      if (!foundUserSkill || !foundVariant) {
+        return res.status(400).json({
+          success: false,
+          message: "Variante no encontrada",
+        });
       }
 
-      // Validar hold/reps
+      const skillVariant = foundUserSkill.skill.variants.find(
+        v => v.variantKey === foundVariant.variantKey
+      );
+
+      if (!skillVariant) {
+        return res.status(400).json({
+          success: false,
+          message: "Stats de la variante no encontradas",
+        });
+      }
+
+      /* -------- Tipo combo -------- */
+      if (
+        type === "static" &&
+        !["static", "basic"].includes(skillVariant.type)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "No puedes usar variantes dinámicas en un combo estático",
+        });
+      }
+
+      if (
+        type === "dynamic" &&
+        !["dynamic", "basic"].includes(skillVariant.type)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "No puedes usar variantes estáticas en un combo dinámico",
+        });
+      }
+
+      /* -------- Hold / Reps -------- */
       const usesHold = skillVariant.stats.energyPerSecond > 0;
       const hold = el.hold ?? 0;
       const reps = el.reps ?? 0;
 
-      if (usesHold && hold < 1) throw new Error(`Variante ${skillVariant.name} requiere hold en segundos.`);
-      if (!usesHold && reps < 1) throw new Error(`Variante ${skillVariant.name} requiere reps.`);
+      if (usesHold && hold < 1) {
+        return res.status(400).json({
+          success: false,
+          message: `La variante ${skillVariant.name} requiere hold`,
+        });
+      }
 
-      // Calcular energía
-      const energyUsed = usesHold ? hold * skillVariant.stats.energyPerSecond : reps * skillVariant.stats.energyPerRep;
+      if (!usesHold && reps < 1) {
+        return res.status(400).json({
+          success: false,
+          message: `La variante ${skillVariant.name} requiere reps`,
+        });
+      }
+
+      const energyUsed = usesHold
+        ? hold * skillVariant.stats.energyPerSecond
+        : reps * skillVariant.stats.energyPerRep;
+
       totalEnergyCost += energyUsed;
 
-      return {
+      comboElements.push({
         userSkill: foundUserSkill._id,
         skill: foundUserSkill.skill._id,
         userSkillVariantId: foundVariant._id,
         variantKey: foundVariant.variantKey,
         variantData: skillVariant,
         hold: usesHold ? hold : 0,
-        reps: usesHold ? 0 : reps
-      };
-    });
-
-    // Validar energía total según tipo de combo
-    const userEnergy = type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
-    if (totalEnergyCost > userEnergy) {
-      return res.status(400).json({ success: false, message: "No tienes suficiente energía para crear este combo." });
+        reps: usesHold ? 0 : reps,
+      });
     }
 
-    // Subir video
-    uploadResult = await uploadToCloudinary(
-        req.file,
-        cloudinaryFolder({
-          username: req.user.username,
-          type: "user_combos",
-        })
-      );
+    /* ------------------ Energía ------------------ */
+    const userEnergy =
+      type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
 
-    // Crear combo
+    if (totalEnergyCost > userEnergy) {
+      return res.status(400).json({
+        success: false,
+        message: "No tienes suficiente energía para crear este combo",
+      });
+    }
+
+    /* ------------------ Subir video ------------------ */
+    uploadResult = await uploadToCloudinary(
+      req.file,
+      cloudinaryFolder({
+        username: req.user.username,
+        type: "user_combos",
+      })
+    );
+
+    /* ------------------ Crear combo ------------------ */
     const combo = await Combo.create({
       user: userId,
       name,
@@ -132,12 +198,12 @@ export const createCombo = async (req, res) => {
       elements: comboElements,
       video: {
         url: uploadResult.url,
-        publicId: uploadResult.publicId
+        publicId: uploadResult.publicId,
       },
-      totalEnergyCost
+      totalEnergyCost,
     });
 
-    // Actualizar usedInCombos de cada userSkill
+    /* ------------------ usedInCombos ------------------ */
     for (const el of comboElements) {
       const userSkill = await UserSkill.findById(el.userSkill);
       if (!userSkill) continue;
@@ -145,46 +211,50 @@ export const createCombo = async (req, res) => {
       const variant = userSkill.variants.id(el.userSkillVariantId);
       if (!variant) continue;
 
-      // Evitar duplicados
-      const alreadyUsed = variant.usedInCombos.some(u => String(u.combo) === String(combo._id));
-      if (!alreadyUsed) {
+      if (
+        !variant.usedInCombos.some(
+          u => String(u.combo) === String(combo._id)
+        )
+      ) {
         variant.usedInCombos.push({ combo: combo._id });
         await userSkill.save();
       }
     }
 
-    // Guardar combo en usuario
     user.combos.push(combo._id);
     await user.save();
 
-    // Crear evento de feed
     await createFeedEvent({
-  userId,
-  type: "NEW_COMBO",
-  message: `creó un nuevo combo: ${name} (${type})`,
-  metadata: {
-    comboId: combo._id,
-    type,
-    videoUrl: uploadResult.url
-  }
-});
+      userId,
+      type: "NEW_COMBO",
+      message: `creó un nuevo combo: ${name} (${type})`,
+      metadata: {
+        comboId: combo._id,
+        type,
+        videoUrl: uploadResult.url,
+      },
+    });
 
-    // Actualizar usuario completo para frontend
     const updatedUser = await UpdateFullUser(userId);
 
     return res.status(201).json({
       success: true,
       message: "Combo creado correctamente",
       combo,
-      user: updatedUser
+      user: updatedUser,
     });
+  } catch (error) {
+    if (uploadResult?.publicId) {
+      await deleteFromCloudinary(uploadResult.publicId, "video");
+    }
 
-  } catch (err) {
-   if (uploadResult?.publicId)
-  await deleteFromCloudinary(uploadResult.publicId, "video");
-    return res.status(500).json({ success: false, message: err.message || "Error del servidor" });
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
+
 
 /* ---------------------------- DELETE ---------------------------- */
 
@@ -272,10 +342,9 @@ export const deleteCombo = async (req, res) => {
 
   } catch (error) {
     console.error("deleteCombo error:", error);
-    return res.status(500).json({
+     return res.status(500).json({
       success: false,
-      message: "Error eliminando combo",
-      error: error.message
+      message: "Error interno del servidor",
     });
   }
 };
@@ -320,8 +389,7 @@ export const getUserCombos = async (req, res) => {
     console.error("Error en getUserCombos:", error);
     return res.status(500).json({
       success: false,
-      message: "Error obteniendo combos",
-      error: error.message
+      message: "Error interno del servidor",
     });
   }
 };
@@ -418,10 +486,10 @@ export const getComboById = async (req, res) => {
     });
 
   } catch (error) {
-    return res.status(500).json({
+    console.error("Error en updateCombo:", error);
+     return res.status(500).json({
       success: false,
-      message: "Error obteniendo combo",
-      error: error.message
+      message: "Error interno del servidor",
     });
   }
 };
@@ -531,7 +599,10 @@ export const updateCombo = async (req, res) => {
     if (uploadResult?.secure_url) await deleteFromCloudinary(uploadResult.secure_url);
 
     console.error("Error en updateCombo:", err);
-    return res.status(500).json({ success: false, message: err.message || "Error actualizando combo" });
+     return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
 
@@ -578,6 +649,10 @@ export const toggleFavoriteCombo = async (req, res) => {
         });
 
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Error actualizando combo favorito", error: error.message });
+    console.error("Error en toggle favorite:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };

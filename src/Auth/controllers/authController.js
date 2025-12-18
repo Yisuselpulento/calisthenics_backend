@@ -117,13 +117,13 @@ export const signup = async (req, res) => {
 
     } catch (error) {
         console.error("Error en signup:", error);
-        res.status(500).json({ success: false, message: "Server error" });
+        return res.status(500).json({ success: false, message: "Error interno del servidor",});
     }
 };
 
 
 export const login = async (req,res) => {
-     console.log("🔥 LOGIN HIT", new Date().toISOString());
+
     const { email, password  } = req.body;
 	try {
 
@@ -188,7 +188,7 @@ export const login = async (req,res) => {
                     });
 	} catch (error) {
 		console.log("Error al iniciar session ", error);
-		res.status(500).json({ success: false, message: error.message });
+		return  res.status(500).json({ success: false, message: "Error interno del servidor"});
 	}
 }
 
@@ -231,7 +231,7 @@ export const verifyEmail = async (req,res)=>{
 
 	} catch (error) {
 		console.log("error en verificar Email ", error);
-		res.status(500).json({ success: false, message: "Server error" });
+	    return  res.status(500).json({ success: false, message: "Error interno del servidor",});
 	}
 }
 
@@ -251,7 +251,7 @@ export const logout = async (req, res) => {
 		res.status(200).json({ success: true, message: "Sesión cerrada exitosamente." });
 	} catch (error) {
 		console.error("Error in logout: ", error);
-		res.status(500).json({ success: false, message: "Error al cerrar la sesión." });
+	    return  res.status(500).json({ success: false, message: "Error interno del servidor",});
 	}
 };
 
@@ -281,7 +281,7 @@ export const forgotPassword = async (req, res) => {
 		res.status(200).json({ success: true, message: "Te hemos enviado un link parapara restablecer tu contraseña" });
 	} catch (error) {
 		console.log("Error in forgotPassword ", error);
-		res.status(500).json({ success: false, message: error.message });
+		return  res.status(500).json({ success: false, message: "Error interno del servidor",});
 	}
 };
 
@@ -330,7 +330,7 @@ export const resetPassword = async (req, res) => {
             });
 	} catch (error) {
 		console.log("Error in resetPassword ", error);
-		res.status(500).json({ success: false, message: error.message });
+	    return  res.status(500).json({ success: false, message: "Error interno del servidor",});
 	}
 };
 
@@ -353,7 +353,7 @@ export const checkAuth = async (req, res) => {
     res.status(200).json({ success: true, user });
   } catch (error) {
     console.log("Error in checkAuth ", error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -405,24 +405,18 @@ export const resendVerificationToken = async (req, res) => {
         });
     } catch (error) {
         console.error("Error en resendVerificationToken:", error);
-        res.status(500).json({ success: false, message: "Error del servidor." });
+        return res.status(500).json({ success: false, message: "Error interno del servidor",});
     }
 };
 
 export const profileAdmin = (req, res) => {
-    try {
-      
-        res.status(200).json({
-            success: true,
-            message: "Bienvenido, administrador",
-            adminData: {
-                userId: req.userId,
-                isAdmin: req.isAdmin,
-                timestamp: new Date(),
-            },
-        });
-    } catch (error) {
-        console.error("Error in profileAdmin:", error);
-        res.status(500).json({ success: false, message: "Error interno del servidor" });
-    }
-};
+  res.status(200).json({
+    success: true,
+    message: "Bienvenido, administrador",
+    adminData: {
+      userId: req.userId,
+      isAdmin: req.isAdmin,
+      timestamp: new Date(),
+    },
+  });
+}

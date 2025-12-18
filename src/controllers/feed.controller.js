@@ -10,6 +10,13 @@ export const getFeedEvents = async (req, res) => {
     // obtener usuarios que sigo
     const user = await User.findById(userId).select("following");
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+
     const followingIds = user.following.map(id => id.toString());
 
     const events = await FeedEvent.find({
@@ -27,10 +34,10 @@ export const getFeedEvents = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("Error en getFeedEvents:", error);
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Error interno del servidor",
     });
   }
 };

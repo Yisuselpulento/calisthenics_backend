@@ -124,27 +124,35 @@ export const createChallenge = async (req, res) => {
     emitToUser(io, toUserId, "userUpdated", { user: updatedToUser });
     emitToUser(io, fromUserId, "userUpdated", { user: updatedFromUser });
 
-       setTimeout(async () => {
-  const pendingChallenge = await Challenge.findById(challenge._id);
-  if (pendingChallenge && pendingChallenge.status === "pending") {
-    pendingChallenge.status = "cancelled";
-    await pendingChallenge.save();
+      setTimeout(async () => {
+  try {
+    const pendingChallenge = await Challenge.findById(challenge._id);
 
-    // Eliminar notificación
-    await Notification.deleteMany({ challenge: challenge._id });
+    if (!pendingChallenge || pendingChallenge.status !== "pending") {
+      return;
+    }
 
-    // Resetear pendingChallenge en ambos usuarios
-          await User.updateOne(
+        pendingChallenge.status = "cancelled";
+        await pendingChallenge.save();
+
+        // Eliminar notificación asociada al challenge
+        const notifications = await Notification.find({ challenge: challenge._id });
+        const notificationIds = notifications.map(n => n._id);
+
+        await Notification.deleteMany({ challenge: challenge._id });
+
+        // Resetear estado del receptor
+        await User.updateOne(
           { _id: toUserId },
           {
             hasPendingChallenge: false,
             pendingChallenge: null,
-            $pull: { notifications: notification._id },
-            $inc: { notificationsCount: -1 },
+            $pull: { notifications: { $in: notificationIds } },
+            $inc: { notificationsCount: -notificationIds.length },
           }
         );
 
-        // emisor
+        // Resetear estado del emisor
         await User.updateOne(
           { _id: fromUserId },
           {
@@ -153,18 +161,21 @@ export const createChallenge = async (req, res) => {
           }
         );
 
-    // 🔔 Notificar al usuario que envió el desafío
-    emitToUser(io, fromUserId, "challengeExpired", {
-      challengeId: challenge._id,
-    });
+        // 🔔 Notificar al usuario que envió el desafío
+        emitToUser(io, fromUserId, "challengeExpired", {
+          challengeId: challenge._id,
+        });
 
-       const updatedToUser = await getAuthUser(toUserId);
+        const updatedToUser = await getAuthUser(toUserId);
         const updatedFromUser = await getAuthUser(fromUserId);
 
         emitToUser(io, toUserId, "userUpdated", { user: updatedToUser });
         emitToUser(io, fromUserId, "userUpdated", { user: updatedFromUser });
-  }
-}, 10000);
+
+      } catch (error) {
+        console.error("Error en challenge expiration timeout:", error);
+      }
+    }, 10000);
 
     return res.status(201).json({
       success: true,
@@ -173,10 +184,7 @@ export const createChallenge = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en createChallenge:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -192,7 +200,7 @@ export const respondChallenge = async (req, res) => {
     if (!challenge || challenge.status !== "pending") {
       return res.status(404).json({
         success: false,
-        message: "Desafío no encontrado o inválido",
+        message: "Desafío no encontrado",
       });
     }
 
@@ -273,10 +281,7 @@ await User.updateOne(
     });
   } catch (error) {
     console.error("Error en respondChallenge:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+    return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
 
@@ -345,9 +350,6 @@ export const cancelChallenge = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en cancelChallenge:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error del servidor",
-    });
+     return res.status(500).json({ success: false, message: "Error interno del servidor",});
   }
 };
