@@ -46,6 +46,16 @@ app.use("/api/feed", feedRoutes);
 app.use("/api/match", matchRoutes);
 app.use("/api/challenge", challengeRoutes);
 
+app.get("/api/check-cookie", (req, res) => {
+  const tokenCookie = req.cookies.token;
+  res.json({
+    token: tokenCookie ? "exists" : "no cookie",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax"
+  });
+});
+
 // -------------------- Servidor HTTP --------------------
 const server = http.createServer(app);
 
