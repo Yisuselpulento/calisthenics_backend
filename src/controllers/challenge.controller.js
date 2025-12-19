@@ -236,15 +236,17 @@ export const respondChallenge = async (req, res) => {
 
     await challenge.save();
 
-   await Notification.deleteMany({ challenge: challenge._id });
+    const notifications = await Notification.find({ challenge: challenge._id });
+    const notificationIds = notifications.map(n => n._id);
+    await Notification.deleteMany({ challenge: challenge._id });
     
    await User.updateOne(
   { _id: challenge.toUser },
   {
     hasPendingChallenge: false,
     pendingChallenge: null,
-    $pull: { notifications: challenge._id },
-    $inc: { notificationsCount: -1 },
+    $pull: { notifications: { $in: notificationIds } },
+    $inc: { notificationsCount: -notificationIds.length },
   }
 );
 
@@ -311,15 +313,17 @@ export const cancelChallenge = async (req, res) => {
     challenge.status = "cancelled";
     await challenge.save();
 
-     await Notification.deleteMany({ challenge: challenge._id });
+    const notifications = await Notification.find({ challenge: challenge._id });
+    const notificationIds = notifications.map(n => n._id);
+    await Notification.deleteMany({ challenge: challenge._id });
       
      await User.updateOne(
         { _id: challenge.toUser },
         {
           hasPendingChallenge: false,
           pendingChallenge: null,
-          $pull: { notifications: challenge._id },
-          $inc: { notificationsCount: -1 },
+          $pull: { notifications: { $in: notificationIds } },
+          $inc: { notificationsCount: -notificationIds.length },
         }
       );
 

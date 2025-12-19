@@ -355,11 +355,12 @@ export const deleteSkillVariant = async (req, res) => {
 
     // ⚠️ Si ya no quedan variantes, borrar todo el UserSkill
     if (userSkill.variants.length === 0) {
-      await UserSkill.deleteOne({ _id: userSkill._id });
 
       await User.findByIdAndUpdate(userId, {
         $pull: { skills: userSkill._id, favoriteSkills: { userSkill: userSkill._id } }
       });
+
+      await UserSkill.deleteOne({ _id: userSkill._id });
 
       await FeedEvent.deleteMany({
           user: userId,
@@ -487,10 +488,9 @@ export const toggleFavoriteSkill = async (req, res) => {
 
     // --- Agregar favorito ---
     user.favoriteSkills.push({
-      userSkill: userSkill._id,
-      userSkillVariantId,
-      fingers: variant.fingers, // opcional, para referencia rápida
-    });
+        userSkill: userSkill._id,
+        userSkillVariantId,
+      });
 
     await user.save();
     const fullUser = await UpdateFullUser(userId);
@@ -525,9 +525,8 @@ export const getFavoriteSkills = async (req, res) => {
       if (!skill) continue;
 
       // Buscar variante en UserSkill
-      const variant = userSkill.variants.find(
-        (v) => v.variantKey === fav.variantKey
-      );
+      const variant = userSkill.variants.find(v => v._id.toString() === fav.userSkillVariantId.toString());
+
       if (!variant) continue;
 
       favorites.push({
