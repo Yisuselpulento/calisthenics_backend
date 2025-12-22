@@ -1,8 +1,11 @@
 import mongoose from "mongoose";
+
 const { Schema } = mongoose;
 
 const ChallengeSchema = new Schema(
   {
+    /* ---------------------- USERS ---------------------- */
+
     fromUser: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -14,6 +17,8 @@ const ChallengeSchema = new Schema(
       ref: "User",
       required: true,
     },
+
+    /* ---------------------- MATCH CONFIG ---------------------- */
 
     type: {
       type: String,
@@ -27,33 +32,54 @@ const ChallengeSchema = new Schema(
       default: "casual",
     },
 
+    /* ---------------------- STATUS ---------------------- */
+
     status: {
       type: String,
-      enum: ["pending", "accepted", "rejected", "expired", "cancelled", "completed"],
+      enum: [
+        "pending",
+        "accepted",
+        "rejected",
+        "expired",
+        "cancelled",
+        "completed",
+      ],
       default: "pending",
     },
 
-    // ⏱️ timeout configurable
+    /* ---------------------- TIMEOUT ---------------------- */
+
     expiresAt: {
       type: Date,
       required: true,
     },
 
-    // 🔁 rematch
+    /* ---------------------- REMATCH ---------------------- */
+
     rematchOf: {
       type: Schema.Types.ObjectId,
       ref: "Challenge",
       default: null,
     },
 
-    // 🔢 para ranked / historial
+    /* ---------------------- RANKED SNAPSHOT ---------------------- */
+
     eloSnapshot: {
-      fromUser: Number,
-      toUser: Number,
+      fromUser: { type: Number, default: null },
+      toUser: { type: Number, default: null },
     },
-    matchId: { type: Schema.Types.ObjectId, ref: "Match", default: null },
+
+    /* ---------------------- MATCH LINK ---------------------- */
+
+    matchId: {
+      type: Schema.Types.ObjectId,
+      ref: "Match",
+      default: null,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 export default mongoose.model("Challenge", ChallengeSchema);

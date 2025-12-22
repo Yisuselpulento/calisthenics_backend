@@ -129,12 +129,10 @@ videoProfile: {
       dynamic: { type: Schema.Types.ObjectId, ref: "Combo", default: null },
     },
 
-    match: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Match",
+    matches: {
+        ranked: [{ type: Schema.Types.ObjectId, ref: "Match" }],
+        casual: [{ type: Schema.Types.ObjectId, ref: "Match" }],
       },
-    ],
 
     followers: [
       {

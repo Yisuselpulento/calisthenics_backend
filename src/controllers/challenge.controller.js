@@ -4,8 +4,9 @@ import Match from "../models/match.model.js";
 import Notification from "../models/notification.model.js";
 import { emitToUser } from "../Sockets/matchSockets.js";
 import { getIO } from "../Sockets/io.js";
-import { getAuthUser } from "../utils/getAuthUser.js";
 import MatchService from "../services/match.service.js";
+import { cleanupChallenge } from "../utils/cleanupChallenge.js";
+import { syncChallengeUsers } from "../utils/syncChallengeUsers.js";
 
 
 /* ---------------------- HELPERS ---------------------- */
@@ -69,9 +70,9 @@ export const createChallenge = async (req, res) => {
       });
     }
 
-    const expiresAt = new Date(
-      Date.now() + getExpireTime(matchType, Boolean(rematchOf))
-    );
+    const expireMs = getExpireTime(matchType, Boolean(rematchOf));
+
+    const expiresAt = new Date(Date.now() + expireMs);
 
     const challenge = await Challenge.create({
       fromUser: fromUserId,
@@ -118,11 +119,7 @@ export const createChallenge = async (req, res) => {
 
        emitToUser(io, toUserId, "newChallenge", { notification });
 
-       const updatedToUser = await getAuthUser(toUserId);
-    const updatedFromUser = await getAuthUser(fromUserId);
-
-    emitToUser(io, toUserId, "userUpdated", { user: updatedToUser });
-    emitToUser(io, fromUserId, "userUpdated", { user: updatedFromUser });
+     await syncChallengeUsers(challenge);
 
       setTimeout(async () => {
   try {
@@ -132,50 +129,20 @@ export const createChallenge = async (req, res) => {
       return;
     }
 
-        pendingChallenge.status = "cancelled";
+        pendingChallenge.status = "expired";
         await pendingChallenge.save();
 
-        // Eliminar notificación asociada al challenge
-        const notifications = await Notification.find({ challenge: challenge._id });
-        const notificationIds = notifications.map(n => n._id);
+        await cleanupChallenge(pendingChallenge);
+        await syncChallengeUsers(pendingChallenge);
 
-        await Notification.deleteMany({ challenge: challenge._id });
-
-        // Resetear estado del receptor
-        await User.updateOne(
-          { _id: toUserId },
-          {
-            hasPendingChallenge: false,
-            pendingChallenge: null,
-            $pull: { notifications: { $in: notificationIds } },
-            $inc: { notificationsCount: -notificationIds.length },
-          }
-        );
-
-        // Resetear estado del emisor
-        await User.updateOne(
-          { _id: fromUserId },
-          {
-            hasPendingChallenge: false,
-            pendingChallenge: null,
-          }
-        );
-
-        // 🔔 Notificar al usuario que envió el desafío
         emitToUser(io, fromUserId, "challengeExpired", {
           challengeId: challenge._id,
         });
 
-        const updatedToUser = await getAuthUser(toUserId);
-        const updatedFromUser = await getAuthUser(fromUserId);
-
-        emitToUser(io, toUserId, "userUpdated", { user: updatedToUser });
-        emitToUser(io, fromUserId, "userUpdated", { user: updatedFromUser });
-
       } catch (error) {
         console.error("Error en challenge expiration timeout:", error);
       }
-    }, 10000);
+    }, expireMs);
 
     return res.status(201).json({
       success: true,
@@ -195,25 +162,52 @@ export const respondChallenge = async (req, res) => {
   const { challengeId, accepted } = req.body;
 
   try {
+    /* ---------------------- 1. OBTENER CHALLENGE ---------------------- */
+
     const challenge = await Challenge.findById(challengeId);
 
     if (!challenge || challenge.status !== "pending") {
       return res.status(404).json({
         success: false,
-        message: "Desafío no encontrado",
+        message: "Desafío no encontrado o no válido",
       });
     }
 
+    /* ---------------------- 2. AUTORIZACIÓN ---------------------- */
+
     if (challenge.toUser.toString() !== userId.toString()) {
-  return res.status(403).json({
-    success: false,
-    message: "No autorizado",
-  });
-}
+      return res.status(403).json({
+        success: false,
+        message: "No autorizado",
+      });
+    }
 
-    challenge.status = accepted ? "accepted" : "rejected";
+     const io = getIO();
 
-    if (accepted && challenge.matchType === "ranked") {
+    /* ---------------------- 3. RECHAZADO ---------------------- */
+
+    if (!accepted) {
+      challenge.status = "rejected";
+      await challenge.save();
+
+      await cleanupChallenge(challenge);
+      await syncChallengeUsers(challenge);
+
+      emitToUser(io, challenge.fromUser, "challengeResponded", {
+        challengeId: challenge._id,
+        accepted: false,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Desafío rechazado",
+      });
+    }
+
+    /* ---------------------- 4. ACEPTADO ---------------------- */
+
+    // 🔐 Snapshot ELO solo si es ranked
+    if (challenge.matchType === "ranked") {
       const fromUser = await User.findById(challenge.fromUser);
       const toUser = await User.findById(challenge.toUser);
 
@@ -221,69 +215,51 @@ export const respondChallenge = async (req, res) => {
         fromUser: fromUser.ranking.elo,
         toUser: toUser.ranking.elo,
       };
+
+      if (!challenge.eloSnapshot) {
+        throw new Error("Ranked sin eloSnapshot");
+      }
     }
 
-    let matchResult   = null;
-
-     if (accepted) {
-      matchResult = await MatchService.createMatchFromChallenge(challenge);
-
-
-      challenge.matchId = matchResult.match._id;
-
-      challenge.status = "completed";
-    }
-
+    challenge.status = "accepted";
     await challenge.save();
 
-    const notifications = await Notification.find({ challenge: challenge._id });
-    const notificationIds = notifications.map(n => n._id);
-    await Notification.deleteMany({ challenge: challenge._id });
-    
-   await User.updateOne(
-  { _id: challenge.toUser },
-  {
-    hasPendingChallenge: false,
-    pendingChallenge: null,
-    $pull: { notifications: { $in: notificationIds } },
-    $inc: { notificationsCount: -notificationIds.length },
-  }
-);
+    /* ---------------------- 5. CREAR MATCH ---------------------- */
 
-// 👤 emisor (nunca tuvo notificación)
-await User.updateOne(
-  { _id: challenge.fromUser },
-  {
-    hasPendingChallenge: false,
-    pendingChallenge: null,
-  }
-);
+    const matchResult = await MatchService.createMatchFromChallenge(challenge);
 
-    const io = getIO();
+    challenge.matchId = matchResult.match._id;
+    challenge.status = "completed";
+    await challenge.save();
 
-// Emitir evento al creador del challenge
-      emitToUser(io, challenge.fromUser, "challengeResponded", {
-        challengeId: challenge._id,
-        accepted, // true o false
-      });
+    /* ---------------------- 6. LIMPIEZA ---------------------- */
 
-      const updatedToUser = await getAuthUser(challenge.toUser);
-      const updatedFromUser = await getAuthUser(challenge.fromUser);
+    await cleanupChallenge(challenge);
+    await syncChallengeUsers(challenge);
 
-      emitToUser(io, challenge.toUser, "userUpdated", { user: updatedToUser });
-      emitToUser(io, challenge.fromUser, "userUpdated", { user: updatedFromUser });
+    /* ---------------------- 7. SOCKETS ---------------------- */
+
+    emitToUser(io, challenge.fromUser, "challengeResponded", {
+      challengeId: challenge._id,
+      accepted: true,
+    });
+
+
+    /* ---------------------- 8. RESPONSE ---------------------- */
 
     return res.status(200).json({
       success: true,
-      message: accepted
-        ? "Desafío aceptado"
-        : "Desafío rechazado",
+      message: "Desafío aceptado",
       challenge,
-      matchResult: matchResult || null,
+      matchResult,
     });
+
   } catch (error) {
     console.error("Error en respondChallenge:", error);
-    return res.status(500).json({ success: false, message: "Error interno del servidor",});
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
 
@@ -313,40 +289,15 @@ export const cancelChallenge = async (req, res) => {
     challenge.status = "cancelled";
     await challenge.save();
 
-    const notifications = await Notification.find({ challenge: challenge._id });
-    const notificationIds = notifications.map(n => n._id);
-    await Notification.deleteMany({ challenge: challenge._id });
-      
-     await User.updateOne(
-        { _id: challenge.toUser },
-        {
-          hasPendingChallenge: false,
-          pendingChallenge: null,
-          $pull: { notifications: { $in: notificationIds } },
-          $inc: { notificationsCount: -notificationIds.length },
-        }
-      );
+    
+    await cleanupChallenge(challenge);
+    await syncChallengeUsers(challenge);
 
-      // 👤 emisor
-      await User.updateOne(
-        { _id: challenge.fromUser },
-        {
-          hasPendingChallenge: false,
-          pendingChallenge: null,
-        }
-      );
+    const io = getIO();
 
-        const io = getIO();
-
-    // Emitir actualización completa de usuario
-    const updatedToUser = await getAuthUser(challenge.toUser);
-    const updatedFromUser = await getAuthUser(challenge.fromUser);
-
-    emitToUser(io, challenge.toUser, "userUpdated", { user: updatedToUser });
-    emitToUser(io, challenge.fromUser, "userUpdated", { user: updatedFromUser });
-
-    // Notificar al creador que el challenge fue cancelado
-    emitToUser(io, challenge.fromUser, "challengeCancelled", { challengeId: challenge._id });
+    emitToUser(io, challenge.fromUser, "challengeCancelled", {
+  challengeId: challenge._id,
+});
 
     res.status(200).json({
       success: true,

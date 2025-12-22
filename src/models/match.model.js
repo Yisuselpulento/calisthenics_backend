@@ -2,41 +2,80 @@ import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
+const PlayerDataSchema = new Schema(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    combo: {
+      type: Schema.Types.ObjectId,
+      ref: "Combo",
+      required: true,
+    },
+
+    points: {
+      type: Number,
+      default: 0,
+    },
+
+    energySpent: {
+      type: Number,
+      default: 0,
+    },
+
+    // Resultado individual (clave para ranked)
+    result: {
+      type: String,
+      enum: ["win", "loss", "draw"],
+      required: true,
+    },
+
+    // Snapshot de elo (solo ranked)
+    eloBefore: {
+      type: Number,
+      default: null,
+    },
+
+    eloAfter: {
+      type: Number,
+      default: null,
+    },
+
+    // Breakdown detallado del combo
+    breakdown: {
+      type: Object,
+      default: {},
+    },
+  },
+  { _id: false }
+);
+
 const MatchSchema = new Schema(
   {
+    /* ---------------------- PLAYERS ---------------------- */
+
     players: [
       {
         type: Schema.Types.ObjectId,
         ref: "User",
         required: true,
-      }
+      },
     ],
 
-    // 🔥 NUEVO (obligatorio)
-    playerData: [
-      {
-        user: {
-          type: Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
+    playerData: {
+      type: [PlayerDataSchema],
+      validate: {
+        validator: function (v) {
+          return v.length === 2;
         },
+        message: "Un match debe tener exactamente 2 jugadores",
+      },
+    },
 
-        combo: {
-          type: Schema.Types.ObjectId,
-          ref: "Combo",
-          required: true,
-        },
-
-        points: { type: Number, default: 0 },
-
-        energySpent: { type: Number, default: 0 },
-
-        breakdown: {
-          type: Object,
-          default: {},
-        }
-      }
-    ],
+    /* ---------------------- RESULT ---------------------- */
 
     winner: {
       type: Schema.Types.ObjectId,
@@ -50,6 +89,8 @@ const MatchSchema = new Schema(
       default: null,
     },
 
+    /* ---------------------- MATCH CONFIG ---------------------- */
+
     mode: {
       type: String,
       enum: ["static", "dynamic"],
@@ -59,11 +100,12 @@ const MatchSchema = new Schema(
     matchType: {
       type: String,
       enum: ["ranked", "casual"],
-      required: true,
       default: "casual",
+      required: true,
     },
 
-    // puntos "globales" del match (puede ser el margen de diferencia)
+    /* ---------------------- GLOBAL STATS ---------------------- */
+
     points: {
       type: Number,
       default: 0,
@@ -80,14 +122,44 @@ const MatchSchema = new Schema(
       default: null,
     },
 
-    details: {
+    /* ---------------------- SNAPSHOTS ---------------------- */
+
+    // Para evitar exploits futuros
+    rulesSnapshot: {
       type: Object,
       default: {},
     },
 
+    details: {
+      type: Object,
+      default: {},
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
+/* ---------------------- VALIDACIONES RANKED ---------------------- */
+
+MatchSchema.pre("save", async function () {
+  if (this.matchType === "ranked") {
+    if (!this.winner || !this.loser) {
+      throw new Error(
+        "Un match ranked requiere winner y loser definidos"
+      );
+    }
+
+    const invalidPlayer = this.playerData.some(
+      (p) => p.eloBefore === null || p.eloAfter === null
+    );
+
+    if (invalidPlayer) {
+      throw new Error(
+        "Match ranked requiere eloBefore y eloAfter en playerData"
+      );
+    }
+  }
+});
 
 export default mongoose.model("Match", MatchSchema);

@@ -20,7 +20,14 @@ export const UpdateFullUser = async (userId) => {
     .populate("followers", "username fullName avatar")
     .populate("following", "username fullName avatar")
     .populate("teams")
-    .populate("match")
+    .populate({
+      path: "matches.ranked",
+      model: "Match",
+      })
+      .populate({
+        path: "matches.casual",
+        model: "Match",
+      })
     .populate("notifications");
 
   if (!user) return null;
