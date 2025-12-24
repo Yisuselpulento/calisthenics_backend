@@ -7,6 +7,7 @@ import {
 } from "../controllers/profile.controller.js";
 import { verifyAuth } from "../Auth/middleware/verifyAuth.js";
 import { limitProfileEdit } from "../middleware/limitProfileEdit.js";
+import { multerErrorHandler } from "../middleware/multerErrorHandler.js";
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.put(
     { name: "avatar", maxCount: 1 },
     { name: "videoProfile", maxCount: 1 },
   ]),
+  multerErrorHandler,
   updateProfile
 );
 

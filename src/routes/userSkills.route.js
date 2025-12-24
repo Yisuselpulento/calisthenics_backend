@@ -10,6 +10,7 @@ import {
   getFavoriteSkills,
   getUserSkillVariantById
 } from "../controllers/userSkills.controller.js";
+import { multerErrorHandler } from "../middleware/multerErrorHandler.js";
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.post(
   "/add",
   verifyAuth,
   upload.single("video"), 
+  multerErrorHandler,
   addSkillVariant
 );
 
@@ -24,6 +26,7 @@ router.put(
   "/edit/:userSkillVariantId",
   verifyAuth,
   upload.single("video"),
+  multerErrorHandler,
   editSkillVariant
 );
 

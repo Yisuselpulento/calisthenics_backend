@@ -178,6 +178,10 @@ videoProfile: {
       type: Date,
       default: null,
     },
+    rankingUnlocked: {
+  type: Boolean,
+    default: false,
+  },
 
     /* ---------------------- NOTIFICATIONS ---------------------- */
 

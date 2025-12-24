@@ -1,5 +1,5 @@
 import { getIO } from "../Sockets/io.js";
-import { emitToUser } from "../Sockets/matchSockets.js";
+import { emitToUser } from "../Sockets/emit.js";
 import { getAuthUser } from "./getAuthUser.js";
 
 export const syncChallengeUsers = async (challenge) => {

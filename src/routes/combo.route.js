@@ -9,6 +9,7 @@ import {
 } from "../controllers/combo.controller.js";
 import { verifyAuth } from "../Auth/middleware/verifyAuth.js";
 import { upload } from "../middleware/upload.js";
+import { multerErrorHandler } from "../middleware/multerErrorHandler.js";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.post(
   "/",
   verifyAuth,
   upload.single("video"), 
+  multerErrorHandler,
   createCombo
 );
 router.get("/", verifyAuth, getUserCombos);

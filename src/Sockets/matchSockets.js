@@ -1,3 +1,5 @@
+import { initRankedSockets } from "./ranked.socket.js";
+
 export const initMatchSockets = (io) => {
   io.on("connection", (socket) => {
     console.log("⚡ Socket conectado:", socket.id);
@@ -8,12 +10,11 @@ export const initMatchSockets = (io) => {
       console.log("👤 Usuario registrado en socket:", userId);
     });
 
+    initRankedSockets(io, socket);
+
     socket.on("disconnect", () => {
       console.log("🔴 Socket desconectado:", socket.id);
     });
   });
 };
 
-export const emitToUser = (io, userId, event, payload) => {
-  io.to(userId.toString()).emit(event, payload);
-};

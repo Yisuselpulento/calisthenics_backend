@@ -1,8 +1,7 @@
 import Challenge from "../models/challenge.model.js";
 import User from "../models/user.model.js";
-import Match from "../models/match.model.js";
 import Notification from "../models/notification.model.js";
-import { emitToUser } from "../Sockets/matchSockets.js";
+import { emitToUser } from "../Sockets/emit.js";
 import { getIO } from "../Sockets/io.js";
 import MatchService from "../services/match.service.js";
 import { cleanupChallenge } from "../utils/cleanupChallenge.js";
@@ -11,17 +10,15 @@ import { syncChallengeUsers } from "../utils/syncChallengeUsers.js";
 
 /* ---------------------- HELPERS ---------------------- */
 
-const getExpireTime = (matchType, isRematch = false) => {
-  if (isRematch) return 15 * 1000;
-  if (matchType === "ranked") return 30 * 1000;
-  return 10 * 1000; // casual
+const getExpireTime = (isRematch = false) => {
+  return isRematch ? 15 * 1000 : 10 * 1000;
 };
 
 /* ---------------------- CREATE CHALLENGE ---------------------- */
 
 export const createChallenge = async (req, res) => {
   const fromUserId = req.userId;
-  const { toUserId, type, matchType = "casual", rematchOf = null } = req.body;
+  const { toUserId, type, rematchOf = null } = req.body;
 
   try {
     if (!toUserId || !type) {
@@ -45,13 +42,6 @@ export const createChallenge = async (req, res) => {
       });
     }
 
-    if (!["casual", "ranked"].includes(matchType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Tipo de match inválido",
-      });
-    }
-
     // ❌ Bloquear si alguno tiene challenge pendiente
     const pendingExists = await Challenge.exists({
       status: "pending",
@@ -70,7 +60,7 @@ export const createChallenge = async (req, res) => {
       });
     }
 
-    const expireMs = getExpireTime(matchType, Boolean(rematchOf));
+    const expireMs = getExpireTime(Boolean(rematchOf));
 
     const expiresAt = new Date(Date.now() + expireMs);
 
@@ -78,7 +68,7 @@ export const createChallenge = async (req, res) => {
       fromUser: fromUserId,
       toUser: toUserId,
       type,
-      matchType,
+      matchType: "casual",
       expiresAt,
       rematchOf,
     });
@@ -173,6 +163,13 @@ export const respondChallenge = async (req, res) => {
       });
     }
 
+    if (challenge.matchType !== "casual") {
+  return res.status(400).json({
+    success: false,
+    message: "Challenge no casual",
+  });
+}
+
     /* ---------------------- 2. AUTORIZACIÓN ---------------------- */
 
     if (challenge.toUser.toString() !== userId.toString()) {
@@ -205,22 +202,6 @@ export const respondChallenge = async (req, res) => {
     }
 
     /* ---------------------- 4. ACEPTADO ---------------------- */
-
-    // 🔐 Snapshot ELO solo si es ranked
-    if (challenge.matchType === "ranked") {
-      const fromUser = await User.findById(challenge.fromUser);
-      const toUser = await User.findById(challenge.toUser);
-
-      challenge.eloSnapshot = {
-        fromUser: fromUser.ranking.elo,
-        toUser: toUser.ranking.elo,
-      };
-
-      if (!challenge.eloSnapshot) {
-        throw new Error("Ranked sin eloSnapshot");
-      }
-    }
-
     challenge.status = "accepted";
     await challenge.save();
 

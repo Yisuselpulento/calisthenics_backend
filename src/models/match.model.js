@@ -143,22 +143,34 @@ const MatchSchema = new Schema(
 /* ---------------------- VALIDACIONES RANKED ---------------------- */
 
 MatchSchema.pre("save", async function () {
-  if (this.matchType === "ranked") {
-    if (!this.winner || !this.loser) {
-      throw new Error(
-        "Un match ranked requiere winner y loser definidos"
-      );
-    }
+  if (this.matchType !== "ranked") return;
 
-    const invalidPlayer = this.playerData.some(
-      (p) => p.eloBefore === null || p.eloAfter === null
+  const isDraw = !this.winner && !this.loser;
+
+  // ❌ Caso inválido: uno sí y otro no
+  if (
+    (this.winner && !this.loser) ||
+    (!this.winner && this.loser)
+  ) {
+    throw new Error(
+      "Match ranked inconsistente: winner/loser inválidos"
     );
+  }
 
-    if (invalidPlayer) {
-      throw new Error(
-        "Match ranked requiere eloBefore y eloAfter en playerData"
-      );
-    }
+  // 🟡 Empate: permitido, sin ELO
+  if (isDraw) {
+    return;
+  }
+
+  // 🟢 Ranked con resultado: requiere ELO
+  const invalidPlayer = this.playerData.some(
+    (p) => p.eloBefore === null || p.eloAfter === null
+  );
+
+  if (invalidPlayer) {
+    throw new Error(
+      "Match ranked requiere eloBefore y eloAfter en playerData"
+    );
   }
 });
 
