@@ -25,15 +25,8 @@ const ChallengeSchema = new Schema(
       enum: ["static", "dynamic"],
       required: true,
     },
-
-    matchType: {
-      type: String,
-      enum: ["casual", "ranked"],
-      default: "casual",
-    },
-
+    
     /* ---------------------- STATUS ---------------------- */
-
     status: {
       type: String,
       enum: [

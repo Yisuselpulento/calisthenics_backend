@@ -68,7 +68,6 @@ export const createChallenge = async (req, res) => {
       fromUser: fromUserId,
       toUser: toUserId,
       type,
-      matchType: "casual",
       expiresAt,
       rematchOf,
     });
@@ -162,13 +161,6 @@ export const respondChallenge = async (req, res) => {
         message: "Desafío no encontrado o no válido",
       });
     }
-
-    if (challenge.matchType !== "casual") {
-  return res.status(400).json({
-    success: false,
-    message: "Challenge no casual",
-  });
-}
 
     /* ---------------------- 2. AUTORIZACIÓN ---------------------- */
 
