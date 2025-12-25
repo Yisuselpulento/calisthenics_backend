@@ -1,32 +1,66 @@
-import { rankedQueue } from "../ranked/rankedQueue.js";
-import { emitToUser } from "./emit.js";
-import { startReadyCheck, confirmReady } from "../ranked/rankedReadyCheck.js";
 import User from "../models/user.model.js";
+import { emitToUser } from "./emit.js";
+
+import { validateRankedSearch } from "../ranked/rankedValidators.js";
+import { findOrQueuePlayer, removeFromQueue  } from "../ranked/rankedService.js";
+import {
+  startAcceptCheck,
+  confirmAccept,
+  cancelAcceptCheck
+} from "../ranked/rankedReadyCheck.js";
+import {
+  lockUser,
+  unlockUser,
+  isUserLocked,
+} from "../ranked/rankedLocks.js";
+import { startRankedMatch } from "../ranked/rankedMatchOrchestrator.js";
 
 const pendingMatches = new Map();
-// matchId -> { players: [idA, idB] }
+// matchId -> { players: [idA, idB], mode }
 
 export const initRankedSockets = (io, socket) => {
 
+  /* =========================
+     BUSCAR RANKED
+  ========================== */
   socket.on("ranked:search", async ({ mode }) => {
-    const userId = socket.userId;
-    const user = await User.findById(userId);
-    if (!user || !user.rankingUnlocked) return;
+  
 
-    const player = {
-      userId,
-      elo: user.ranking.elo,
-    };
+    try {
+      const userId = socket.userId;
+      if (!userId) return;
 
-    const queue = rankedQueue[mode];
+      if (isUserLocked(userId)) {
+        console.log(`⛔ ${userId} está esperando aceptación`);
+        return;
+      }
 
-    const opponent = queue.find(p =>
-      Math.abs(p.elo - player.elo) <= 100
-    );
+      if (!["static", "dynamic"].includes(mode)) return;
 
-    if (opponent) {
-      rankedQueue[mode] = queue.filter(p => p.userId !== opponent.userId);
+      const user = await User.findById(userId);
+      if (!user) return;
 
+      // ✅ Validación de negocio
+      const combo = await validateRankedSearch(user, mode);
+
+      const player = {
+        userId,
+        elo: user.ranking.elo,
+        comboId: combo._id,
+      };
+
+      console.log(`🔍 ${userId} buscando ranked ${mode}`);
+
+      // ✅ Matchmaking centralizado
+      const opponent = findOrQueuePlayer({ mode, player });
+
+      // ❌ No hay rival → queda en cola
+      if (!opponent) {
+        console.log(`🕒 ${userId} en cola ${mode}`);
+        return;
+      }
+
+      // ✅ MATCH ENCONTRADO
       const matchId = `${player.userId}_${opponent.userId}_${Date.now()}`;
 
       pendingMatches.set(matchId, {
@@ -34,40 +68,111 @@ export const initRankedSockets = (io, socket) => {
         mode,
       });
 
+      console.log("⚔️ Match encontrado:", matchId);
+
       emitToUser(io, player.userId, "ranked:found", {
         opponentId: opponent.userId,
         matchId,
+        mode,
       });
 
       emitToUser(io, opponent.userId, "ranked:found", {
         opponentId: player.userId,
         matchId,
+        mode,
       });
 
-      startReadyCheck(io, matchId, [player.userId, opponent.userId]);
-    } else {
-      queue.push(player);
+      emitToUser(io, player.userId, "ranked:readyCheck", {
+          matchId,
+          timeout: 10000,
+        });
+
+      emitToUser(io, opponent.userId, "ranked:readyCheck", {
+        matchId,
+        timeout: 10000,
+      });
+
+      // ✅ UN SOLO CHECK DE ACEPTACIÓN (10s)
+      startAcceptCheck(io, matchId, [
+        player.userId,
+        opponent.userId,
+      ]);
+
+    } catch (err) {
+      console.error("❌ ranked:search", err.message);
+
+      emitToUser(io, socket.userId, "ranked:error", {
+        message: err.message,
+      });
     }
   });
 
-  socket.on("ranked:accept", ({ matchId }) => {
-    const match = pendingMatches.get(matchId);
-    if (!match) return;
+  /* =========================
+     ACEPTAR MATCH
+  ========================== */
+  socket.on("ranked:accept", async ({ matchId }) => {
+  const match = pendingMatches.get(matchId);
+  if (!match) return;
+  if (!match.players.includes(socket.userId)) return;
 
-    const ready = confirmReady(io, matchId, socket.userId);
+  lockUser(socket.userId);
 
-    if (ready) {
-      // ✅ ambos aceptaron
-      pendingMatches.delete(matchId);
+  const accepted = confirmAccept(io, matchId, socket.userId);
+  if (!accepted) return;
 
-      // aquí luego creamos el Match real
-      // createRankedMatch(match.players, match.mode)
-    }
-  });
+  try {
+    const result = await startRankedMatch({
+      players: match.players,
+      mode: match.mode,
+    });
 
+    const realMatchId = result.match._id.toString();
+
+    match.players.forEach((userId) => {
+      emitToUser(io, userId, "ranked:started", {
+        matchId: realMatchId,
+        mode: match.mode,
+      });
+      unlockUser(userId);
+    });
+
+    pendingMatches.delete(matchId);
+
+  } catch (err) {
+    console.error("❌ Ranked start error", err.message);
+
+    match.players.forEach((userId) => {
+      emitToUser(io, userId, "ranked:cancelled", {
+        reason: "error",
+      });
+      unlockUser(userId);
+    });
+
+    pendingMatches.delete(matchId);
+  }
+});
+
+  /* =========================
+     CANCELAR BÚSQUEDA
+  ========================== */
   socket.on("ranked:cancel", ({ mode }) => {
-    rankedQueue[mode] = rankedQueue[mode].filter(
-      p => p.userId !== socket.userId
-    );
-  });
+  if (!mode) return;
+
+  removeFromQueue(mode, socket.userId);
+  unlockUser(socket.userId);
+});
+
+  /* =========================
+     DISCONNECT
+  ========================== */
+ socket.on("disconnect", () => {
+  for (const [matchId, match] of pendingMatches) {
+    if (match.players.includes(socket.userId)) {
+      cancelAcceptCheck(io, matchId, match.players);
+      pendingMatches.delete(matchId);
+    }
+  }
+});
+
+
 };

@@ -2,7 +2,7 @@ import Match from "../models/match.model.js";
 import User from "../models/user.model.js";
 import { calculateMatchResults } from "../utils/calculateMatchResults.js";
 import { getIO } from "../Sockets/io.js";
-import { emitToUser } from "../Sockets/matchSockets.js";
+import { emitToUser } from "../Sockets/emit.js";
 
 const RANKED_ENERGY_COST = 333;
 const K_FACTOR = 32;

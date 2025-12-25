@@ -3,7 +3,7 @@ import User from "../models/user.model.js";
 export const getAuthUser = (userId) => {
   return User.findById(userId)
     .select(
-      "_id username fullName email videoProfile avatar gender isAdmin isVerified profileType country altura peso notificationsCount ranking followers following favoriteCombos pendingChallenge hasPendingChallenge"
+      "_id username fullName email videoProfile avatar gender isAdmin isVerified profileType country altura peso notificationsCount ranking followers following favoriteCombos pendingChallenge hasPendingChallenge stats.energy"
     )
      .populate({
       path: "favoriteCombos.static",

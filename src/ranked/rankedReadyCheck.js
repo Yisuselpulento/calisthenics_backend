@@ -1,46 +1,46 @@
-const readyChecks = new Map();
-// key: matchId
-// value: { players: Set, timer }
+import { unlockUser } from "./rankedLocks.js";
 
-export const startReadyCheck = (io, matchId, players, timeout = 15000) => {
-  readyChecks.set(matchId, {
-    players: new Set(),
+const acceptChecks = new Map();
+// matchId -> { accepted: Set, timer, players }
+
+export const startAcceptCheck = (io, matchId, players, timeout = 10000) => {
+  acceptChecks.set(matchId, {
+    accepted: new Set(),
+    players,
     timer: setTimeout(() => {
-      cancelReadyCheck(io, matchId, players);
+      cancelAcceptCheck(io, matchId, players);
     }, timeout),
   });
-
-  players.forEach(userId => {
-    io.to(userId.toString()).emit("ranked:readyCheck", {
-      matchId,
-      timeout,
-    });
-  });
 };
 
-export const confirmReady = (io, matchId, userId) => {
-  const check = readyChecks.get(matchId);
-  if (!check) return false;
+    export const confirmAccept = (io, matchId, userId) => {
+      const check = acceptChecks.get(matchId);
+      if (!check) return false;
 
-  check.players.add(userId);
+      if (check.accepted.has(userId.toString())) {
+        return false; // 🚫 ya aceptó
+      }
 
-  if (check.players.size === 2) {
-    clearTimeout(check.timer);
-    readyChecks.delete(matchId);
-    return true; // ambos aceptaron
-  }
+      check.accepted.add(userId.toString());
 
-  return false;
-};
+      if (check.accepted.size === check.players.length) {
+        clearTimeout(check.timer);
+        acceptChecks.delete(matchId);
+        return true;
+      }
 
-export const cancelReadyCheck = (io, matchId, players) => {
-  const check = readyChecks.get(matchId);
+      return false;
+    };
+
+export const cancelAcceptCheck = (io, matchId, players) => {
+  const check = acceptChecks.get(matchId);
   if (!check) return;
 
   clearTimeout(check.timer);
-  readyChecks.delete(matchId);
+  acceptChecks.delete(matchId);
 
-  players.forEach(userId => {
+  players.forEach((userId) => {
+    unlockUser(userId); // 🔓 liberar a TODOS
     io.to(userId.toString()).emit("ranked:cancelled", {
       reason: "timeout",
     });
