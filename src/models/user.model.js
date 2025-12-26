@@ -189,7 +189,7 @@ videoProfile: {
     },
     rankingUnlocked: {
   type: Boolean,
-    default: false,
+    default: true,
   },
 
     /* ---------------------- NOTIFICATIONS ---------------------- */
