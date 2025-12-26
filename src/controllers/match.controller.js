@@ -80,20 +80,23 @@ export const getMatchByIdController = async (req, res) => {
 };
 
 const getPlayerSnapshot = (match, userId) => {
-  return match.playerData.find(
-    (p) => p.user.toString() === userId.toString()
-  );
+  return match.playerData.find((p) => {
+    const id = p.user._id ? p.user._id.toString() : p.user.toString();
+    return id === userId.toString();
+  });
 };
 
-const getOpponent = (match, userId) => {
-  return match.players.find(
-    (p) => p._id.toString() !== userId.toString()
-  );
+const getOpponentSnapshot = (match, userId) => {
+  return match.players.find((p) => {
+    const id = p._id ? p._id.toString() : p.toString();
+    return id !== userId.toString();
+  }) || {};
 };
 
-export const getMyRankedHistory = async (req, res) => {
+// ------------------- USER HISTORIES -------------------
+export const getUserRankedHistory = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const { userId } = req.params;
 
     const matches = await Match.find({
       players: userId,
@@ -107,45 +110,38 @@ export const getMyRankedHistory = async (req, res) => {
 
     const history = matches.map((match) => {
       const me = getPlayerSnapshot(match, userId);
-      const opponent = getOpponent(match, userId);
+      const opponent = getOpponentSnapshot(match, userId);
 
       return {
         _id: match._id,
         createdAt: match.createdAt,
         mode: match.mode,
-
-        result: me.result,
-        points: me.points,
-
-        eloBefore: me.eloBefore,
-        eloAfter: me.eloAfter,
-
-        combo: me.combo,
-
+        result: me?.result,
+        points: me?.points,
+        eloBefore: me?.eloBefore,
+        eloAfter: me?.eloAfter,
+        energySpent: me?.energySpent,
+        combo: me?.combo,
         opponent: {
-          username: opponent.username,
-          avatar: opponent.avatar,
+          username: opponent?.username || "Desconocido",
+          avatar: opponent?.avatar || null,
         },
       };
     });
 
-    return res.status(200).json({
-      success: true,
-      matches: history,
-    });
+    return res.status(200).json({ success: true, matches: history });
   } catch (error) {
-    console.error("Error ranked history:", error);
+    console.error("Error user ranked history:", error);
     return res.status(500).json({
       success: false,
-      message: "Error obteniendo historial ranked",
+      message: "Error obteniendo historial del usuario",
     });
   }
 };
 
-
-export const getMyCasualHistory = async (req, res) => {
+export const getUserCasualHistory = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const { userId } = req.params;
 
     const matches = await Match.find({
       players: userId,
@@ -159,35 +155,29 @@ export const getMyCasualHistory = async (req, res) => {
 
     const history = matches.map((match) => {
       const me = getPlayerSnapshot(match, userId);
-      const opponent = getOpponent(match, userId);
+      const opponent = getOpponentSnapshot(match, userId);
 
       return {
         _id: match._id,
         createdAt: match.createdAt,
         mode: match.mode,
-
-        result: me.result,
-        points: me.points,
-        energySpent: me.energySpent,
-
-        combo: me.combo,
-
+        result: me?.result,
+        points: me?.points,
+        energySpent: me?.energySpent,
+        combo: me?.combo,
         opponent: {
-          username: opponent.username,
-          avatar: opponent.avatar,
+          username: opponent?.username || "Desconocido",
+          avatar: opponent?.avatar || null,
         },
       };
     });
 
-    return res.status(200).json({
-      success: true,
-      matches: history,
-    });
+    return res.status(200).json({ success: true, matches: history });
   } catch (error) {
-    console.error("Error casual history:", error);
+    console.error("Error user casual history:", error);
     return res.status(500).json({
       success: false,
-      message: "Error obteniendo historial casual",
+      message: "Error obteniendo historial del usuario",
     });
   }
 };
