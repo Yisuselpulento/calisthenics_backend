@@ -11,10 +11,12 @@ export const findOrQueuePlayer = ({ mode, player }) => {
   );
 
   if (opponent) {
+    // Sacar del queue
     rankedQueue[mode] = queue.filter(p => p.userId !== opponent.userId);
     return opponent;
   }
 
+  // Agregar al queue
   queue.push(player);
   return null;
 };
@@ -23,7 +25,7 @@ export const removeFromQueue = (mode, userId) => {
   if (!rankedQueue[mode]) return;
 
   rankedQueue[mode] = rankedQueue[mode].filter(
-    (p) => p.userId.toString() !== userId.toString()
+    p => p.userId.toString() !== userId.toString()
   );
 
   console.log(`🚫 ${userId} eliminado de la cola ${mode}`);

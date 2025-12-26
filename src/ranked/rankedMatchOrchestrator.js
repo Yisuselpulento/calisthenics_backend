@@ -18,8 +18,8 @@ export const startRankedMatch = async ({ players, mode }) => {
     userBId,
     type: mode,
     eloSnapshot: {
-      userA: userA.ranking.elo,
-      userB: userB.ranking.elo,
+      userA: userA.ranking[mode]?.elo ?? 1000,  // <-- usar mode
+    userB: userB.ranking[mode]?.elo ?? 1000,  // <-- usar mode
     },
   });
 };

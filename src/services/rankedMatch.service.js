@@ -97,25 +97,28 @@ const RankedMatchService = {
     ];
 
     // ---------------------- ACTUALIZAR USUARIOS ----------------------
-    userA.ranking.elo = newEloA;
-    userB.ranking.elo = newEloB;
+    userA.ranking[type].elo = newEloA;
+    userB.ranking[type].elo = newEloB;
 
     if (resultA === "win") {
-      userA.ranking.wins++;
-      userB.ranking.losses++;
+      userA.ranking[type].wins++;
+      userB.ranking[type].losses++;
     } else if (resultB === "win") {
-      userB.ranking.wins++;
-      userA.ranking.losses++;
+      userB.ranking[type].wins++;
+      userA.ranking[type].losses++;
     } else {
-      userA.ranking.draws++;
-      userB.ranking.draws++;
+      // Opcional: si quieres guardar empates, puedes añadir draws en tu esquema
+      userA.ranking[type].draws = (userA.ranking[type].draws || 0) + 1;
+      userB.ranking[type].draws = (userB.ranking[type].draws || 0) + 1;
     }
 
+    // Gastar energía
     userA.stats.energy -= RANKED_ENERGY_COST;
     userB.stats.energy -= RANKED_ENERGY_COST;
 
-    userA.updateTier();
-    userB.updateTier();
+    // ---------------------- ACTUALIZAR TIER ----------------------
+    userA.updateTier(type);
+    userB.updateTier(type);
 
     await Promise.all([userA.save(), userB.save()]);
 

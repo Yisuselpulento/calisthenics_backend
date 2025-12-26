@@ -158,11 +158,20 @@ videoProfile: {
     /* ---------------------- RANKING SYSTEM ---------------------- */
 
     ranking: {
-      elo: { type: Number, default: 1000 },
-      tier: { type: String, default: "Bronze" },
-      wins: { type: Number, default: 0 },
-      losses: { type: Number, default: 0 },
+  static: {
+    elo: { type: Number, default: 1000 },
+    tier: { type: String, default: "Bronze" },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+  },
+  dynamic: {
+    elo: { type: Number, default: 1000 },
+    tier: { type: String, default: "Bronze" },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
     },
+  },
+  
     pendingChallenge: {
       type: Schema.Types.ObjectId,
       ref: "Challenge",
@@ -197,13 +206,15 @@ videoProfile: {
   { timestamps: true }
 );
 
-UserSchema.methods.updateTier = function () {
-  const p = this.ranking.elo;
+UserSchema.methods.updateTier = function (type) {
+  if (!["static", "dynamic"].includes(type)) return;
 
-  if (p < 1000) this.ranking.tier = "Bronze";
-  else if (p < 1500) this.ranking.tier = "Silver";
-  else if (p < 2000) this.ranking.tier = "Gold";
-  else this.ranking.tier = "Diamond";
+  const elo = this.ranking[type].elo;
+
+  if (elo < 1000) this.ranking[type].tier = "Bronze";
+  else if (elo < 1500) this.ranking[type].tier = "Silver";
+  else if (elo < 2000) this.ranking[type].tier = "Gold";
+  else this.ranking[type].tier = "Diamond";
 };
 
 

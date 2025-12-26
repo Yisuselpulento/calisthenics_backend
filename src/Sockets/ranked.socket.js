@@ -45,7 +45,7 @@ export const initRankedSockets = (io, socket) => {
 
       const player = {
         userId,
-        elo: user.ranking.elo,
+         elo: user.ranking[mode]?.elo,
         comboId: combo._id,
       };
 

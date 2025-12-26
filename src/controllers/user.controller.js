@@ -33,30 +33,35 @@ export const searchUsers = async (req, res) => {
 export const getRankedLeaderboard = async (req, res) => {
   try {
     const currentUserId = req.userId;
+    const type = req.query.type || "static"; // Por defecto "static"
+
+    if (!["static", "dynamic"].includes(type)) {
+      return res.status(400).json({ success: false, message: "Tipo de ranking inválido" });
+    }
 
     // 🔥 Top 100
     const leaderboard = await User.find({})
-      .sort({ "ranking.elo": -1 })
+      .sort({ [`ranking.${type}.elo`]: -1 })
       .select(
-        "username fullName avatar ranking.elo ranking.tier ranking.wins ranking.losses"
+        `username fullName avatar ranking.${type}.elo ranking.${type}.tier ranking.${type}.wins ranking.${type}.losses`
       )
       .limit(100);
 
     // 🔢 Usuario actual
     const me = await User.findById(currentUserId).select(
-      "username fullName avatar ranking.elo ranking.tier ranking.wins ranking.losses"
+      `username fullName avatar ranking.${type}.elo ranking.${type}.tier ranking.${type}.wins ranking.${type}.losses`
     );
-    
+
     const myRank =
       me
         ? (await User.countDocuments({
-            "ranking.elo": { $gt: me.ranking.elo },
+            [`ranking.${type}.elo`]: { $gt: me.ranking[type].elo },
           })) + 1
         : null;
 
     return res.status(200).json({
       success: true,
-      message: "Leaderboard ranked",
+      message: `Leaderboard ranked (${type})`,
       data: {
         leaderboard,
         me: me
@@ -69,6 +74,9 @@ export const getRankedLeaderboard = async (req, res) => {
     });
   } catch (error) {
     console.error("Error getRankedLeaderboard:", error);
-    return res.status(500).json({ success: false, message: "Error interno del servidor",});
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };
