@@ -1,4 +1,5 @@
 import { unlockUser } from "./rankedLocks.js";
+import { rankedSessions } from "./rankedSessions.js";
 
 const acceptChecks = new Map();
 // matchId -> { accepted: Set, timer, players }
@@ -39,10 +40,12 @@ export const cancelAcceptCheck = (io, matchId, players) => {
   clearTimeout(check.timer);
   acceptChecks.delete(matchId);
 
-  players.forEach((userId) => {
-    unlockUser(userId); // 🔓 liberar a TODOS
-    io.to(userId.toString()).emit("ranked:cancelled", {
-      reason: "timeout",
-    });
+  players.forEach(userId => {
+  rankedSessions.delete(userId.toString());
+  unlockUser(userId);
+
+  io.to(userId.toString()).emit("ranked:cancelled", {
+    reason: "timeout",
   });
+});
 };
