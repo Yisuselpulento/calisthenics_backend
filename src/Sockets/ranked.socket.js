@@ -16,6 +16,9 @@ import {
 } from "../ranked/rankedLocks.js";
 import { startRankedMatch } from "../ranked/rankedMatchOrchestrator.js";
 import { rankedSessions } from "../ranked/rankedSessions.js";
+import { applyEnergyRegen } from "../services/energy.service.js";
+
+const RANKED_ENERGY_COST = 333;
 
 const pendingMatches = new Map();
 // matchId -> { players: [idA, idB], mode }
@@ -25,31 +28,40 @@ export const initRankedSockets = (io, socket) => {
      BUSCAR RANKED
   ========================== */
   socket.on("ranked:search", async ({ mode }) => {
+    const userId = socket.userId;
+    if (!userId) return;
+    if (!["static", "dynamic"].includes(mode)) return;
+
+    const key = userId.toString();
+
+    if (rankedSessions.has(key)) return;
+    if (isUserLocked(userId)) return;
+
+    lockUser(userId, { ttl: 30000 });
+
     try {
-      const userId = socket.userId;
-      if (!userId) return;
-
-      if (!["static", "dynamic"].includes(mode)) return;
-
-      if (rankedSessions.has(userId.toString())) {
-        console.warn(`⚠️ ${userId} ya tiene sesión ranked activa`);
-        return;
-      }
-
-      if (isUserLocked(userId)) {
-        console.log(`⛔ ${userId} está esperando aceptación`);
-        return;
-      }
-
       const user = await User.findById(userId);
-      if (!user) return;
+      if (!user) {
+        unlockUser(userId);
+        return;
+      }
 
-      // ✅ Validación de negocio
+      if (user.stats.energy < RANKED_ENERGY_COST) {
+        unlockUser(userId);
+        emitToUser(io, userId, "ranked:error", {
+          message: "Energía insuficiente para jugar ranked",
+        });
+        return;
+      }
+
+      await user.save();
+
+      // ✅ VALIDACIÓN NEGOCIO
       const combo = await validateRankedSearch(user, mode);
 
-      // 🆔 crear sesión DESPUÉS de validar
+      // 🆔 SESIÓN
       const sessionId = crypto.randomUUID();
-      rankedSessions.set(userId.toString(), sessionId);
+      rankedSessions.set(key, sessionId);
 
       const player = {
         userId,
@@ -62,13 +74,13 @@ export const initRankedSockets = (io, socket) => {
 
       const opponent = findOrQueuePlayer({ mode, player });
 
-      // ❌ No hay rival → queda en cola
-      if (!opponent) {
-        console.log(`🕒 ${userId} en cola ${mode}`);
-        return;
-      }
+      // ❌ A COLA
+      if (!opponent) return;
 
-      // ✅ MATCH ENCONTRADO
+      removeFromQueue(mode, player.userId, player.sessionId);
+     removeFromQueue(mode, opponent.userId, opponent.sessionId);
+
+      // ✅ MATCH
       const matchId = `${player.userId}_${opponent.userId}_${Date.now()}`;
 
       pendingMatches.set(matchId, {
@@ -76,37 +88,28 @@ export const initRankedSockets = (io, socket) => {
         mode,
       });
 
-      emitToUser(io, player.userId, "ranked:found", {
-        opponentId: opponent.userId,
-        matchId,
-        mode,
+      [player.userId, opponent.userId].forEach((uid, i) => {
+        emitToUser(io, uid, "ranked:found", {
+          opponentId: i === 0 ? opponent.userId : player.userId,
+          matchId,
+          mode,
+        });
+
+        emitToUser(io, uid, "ranked:readyCheck", {
+          matchId,
+          timeout: 10000,
+        });
       });
 
-      emitToUser(io, opponent.userId, "ranked:found", {
-        opponentId: player.userId,
-        matchId,
-        mode,
-      });
-
-      emitToUser(io, player.userId, "ranked:readyCheck", {
-        matchId,
-        timeout: 10000,
-      });
-
-      emitToUser(io, opponent.userId, "ranked:readyCheck", {
-        matchId,
-        timeout: 10000,
-      });
-
-      // ⏳ Ready check único
       startAcceptCheck(io, matchId, [
         player.userId,
         opponent.userId,
       ]);
     } catch (err) {
       console.error("❌ ranked:search", err.message);
+      unlockUser(userId);
 
-      emitToUser(io, socket.userId, "ranked:error", {
+      emitToUser(io, userId, "ranked:error", {
         message: err.message,
       });
     }
@@ -116,61 +119,65 @@ export const initRankedSockets = (io, socket) => {
      ACEPTAR MATCH
   ========================== */
   socket.on("ranked:accept", async ({ matchId }) => {
-    const match = pendingMatches.get(matchId);
-    if (!match) return;
-    if (!match.players.includes(socket.userId)) return;
+  const userId = socket.userId;
+  if (!userId) return;
 
-    const accepted = confirmAccept(io, matchId, socket.userId);
-    if (!accepted) return;
+  const match = pendingMatches.get(matchId);
+  if (!match || !match.players.includes(userId)) {
+    return;
+  }
 
-    lockUser(socket.userId);
+  const accepted = confirmAccept(io, matchId, userId);
+  if (!accepted) return;
 
-    try {
-      const result = await startRankedMatch({
-        players: match.players,
+  try {
+    const result = await startRankedMatch({
+      players: match.players,
+      mode: match.mode,
+    });
+
+    const realMatchId = result.match._id.toString();
+
+    match.players.forEach((uid) => {
+      rankedSessions.delete(uid.toString());
+      unlockUser(uid);
+
+      emitToUser(io, uid, "ranked:started", {
+        matchId: realMatchId,
         mode: match.mode,
       });
+    });
 
-      const realMatchId = result.match._id.toString();
+    pendingMatches.delete(matchId);
+  } catch (err) {
+    console.error("❌ Ranked start error", err.message);
 
-      match.players.forEach((userId) => {
-        rankedSessions.delete(userId.toString());
-        emitToUser(io, userId, "ranked:started", {
-          matchId: realMatchId,
-          mode: match.mode,
-        });
-        unlockUser(userId);
+    match.players.forEach((uid) => {
+      rankedSessions.delete(uid.toString());
+      unlockUser(uid);
+
+      emitToUser(io, uid, "ranked:cancelled", {
+        reason: "error",
       });
+    });
 
-      pendingMatches.delete(matchId);
-    } catch (err) {
-      console.error("❌ Ranked start error", err.message);
-
-      match.players.forEach((userId) => {
-        rankedSessions.delete(userId.toString());
-        unlockUser(userId);
-
-        emitToUser(io, userId, "ranked:cancelled", {
-          reason: "error",
-        });
-      });
-
-      pendingMatches.delete(matchId);
-    }
-  });
+    pendingMatches.delete(matchId);
+  }
+});
 
   /* =========================
      CANCELAR BÚSQUEDA
   ========================== */
   socket.on("ranked:cancel", ({ mode }) => {
-    if (!mode) return;
-
     const userId = socket.userId;
-    const sessionId = rankedSessions.get(userId.toString());
+    if (!userId || !mode) return;
+
+    const key = userId.toString();
+    const sessionId = rankedSessions.get(key);
     if (!sessionId) return;
 
     removeFromQueue(mode, userId, sessionId);
-    rankedSessions.delete(userId.toString());
+    rankedSessions.delete(key);
     unlockUser(userId);
   });
 
@@ -181,15 +188,13 @@ export const initRankedSockets = (io, socket) => {
     const userId = socket.userId;
     if (!userId) return;
 
-    const sessionId = rankedSessions.get(userId.toString());
+    const key = userId.toString();
+    const sessionId = rankedSessions.get(key);
     if (!sessionId) return;
 
     ["static", "dynamic"].forEach((mode) => {
       removeFromQueue(mode, userId, sessionId);
     });
-
-    rankedSessions.delete(userId.toString());
-    unlockUser(userId);
 
     for (const [matchId, match] of pendingMatches) {
       if (match.players.includes(userId)) {
@@ -197,6 +202,9 @@ export const initRankedSockets = (io, socket) => {
         pendingMatches.delete(matchId);
       }
     }
+
+    rankedSessions.delete(key);
+    unlockUser(userId);
 
     emitToUser(io, userId, "ranked:cancelled", {
       reason: "disconnect",

@@ -1,160 +1,198 @@
+import mongoose from "mongoose";
 import Match from "../models/match.model.js";
 import User from "../models/user.model.js";
 import { calculateMatchResults } from "../utils/calculateMatchResults.js";
 import { getIO } from "../Sockets/io.js";
 import { emitToUser } from "../Sockets/emit.js";
+import { consumeEnergy } from "./energy.service.js";
+import { calculateTier } from "../utils/calculateTier.js";
 
 const RANKED_ENERGY_COST = 333;
 const K_FACTOR = 32;
 
 const RankedMatchService = {
-  /**
-   * Crea un match ranked entre dos usuarios
-   * @param {Object} params
-   * @param {string} params.userAId
-   * @param {string} params.userBId
-   * @param {string} params.type        // "static" | "dynamic"
-   * @param {Object} params.eloSnapshot  // { userA: number, userB: number }
-   */
   createRankedMatch: async ({ userAId, userBId, type, eloSnapshot }) => {
-    // ---------------------- OBTENER USUARIOS ----------------------
-    const [userA, userB] = await Promise.all([
-      User.findById(userAId),
-      User.findById(userBId),
-    ]);
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    if (!userA || !userB) throw new Error("Usuarios del match ranked no encontrados");
+    // 🆕 snapshot energía
+    let energyBeforeA;
+    let energyBeforeB;
 
-    // ---------------------- VALIDACIONES ----------------------
-    if (!eloSnapshot || eloSnapshot.userA == null || eloSnapshot.userB == null) {
-      throw new Error("Ranked requiere eloSnapshot válido");
+    try {
+      // ---------------- USUARIOS ----------------
+      const [userA, userB] = await Promise.all([
+        User.findById(userAId).session(session),
+        User.findById(userBId).session(session),
+      ]);
+
+      if (!userA || !userB) {
+        throw new Error("Usuarios no encontrados");
+      }
+
+      if (!eloSnapshot?.userA || !eloSnapshot?.userB) {
+        throw new Error("eloSnapshot inválido");
+      }
+
+      if (!["static", "dynamic"].includes(type)) {
+        throw new Error("Tipo de ranked inválido");
+      }
+
+      // 🆕 VALIDACIÓN DURA DE ENERGÍA
+      if (userA.stats.energy < RANKED_ENERGY_COST) {
+        throw new Error("UserA sin energía");
+      }
+      if (userB.stats.energy < RANKED_ENERGY_COST) {
+        throw new Error("UserB sin energía");
+      }
+
+      // 🆕 GUARDAR ENERGÍA ANTES
+      energyBeforeA = userA.stats.energy;
+      energyBeforeB = userB.stats.energy;
+
+      // ---------------- RESULTADOS ----------------
+      const [resA, resB] = await Promise.all([
+        calculateMatchResults(userA, type),
+        calculateMatchResults(userB, type),
+      ]);
+
+      let resultA = "draw";
+      let resultB = "draw";
+      let winner = null;
+      let loser = null;
+
+      if (resA.totalPoints > resB.totalPoints) {
+        resultA = "win";
+        resultB = "loss";
+        winner = userA._id;
+        loser = userB._id;
+      } else if (resB.totalPoints > resA.totalPoints) {
+        resultA = "loss";
+        resultB = "win";
+        winner = userB._id;
+        loser = userA._id;
+      }
+
+      // ---------------- ELO ----------------
+      const expectedA =
+        1 / (1 + Math.pow(10, (eloSnapshot.userB - eloSnapshot.userA) / 400));
+      const expectedB = 1 - expectedA;
+
+      const scoreA = resultA === "win" ? 1 : resultA === "loss" ? 0 : 0.5;
+      const scoreB = 1 - scoreA;
+
+      const newEloA = Math.round(
+        eloSnapshot.userA + K_FACTOR * (scoreA - expectedA)
+      );
+      const newEloB = Math.round(
+        eloSnapshot.userB + K_FACTOR * (scoreB - expectedB)
+      );
+
+      // ---------------- ENERGÍA ----------------
+      consumeEnergy(userA, RANKED_ENERGY_COST);
+      consumeEnergy(userB, RANKED_ENERGY_COST);
+
+      // ---------------- RANKING ----------------
+      userA.ranking[type].elo = newEloA;
+      userB.ranking[type].elo = newEloB;
+
+      userA.ranking[type].tier = calculateTier(newEloA);
+      userB.ranking[type].tier = calculateTier(newEloB);
+
+      if (resultA === "win") {
+        userA.ranking[type].wins++;
+        userB.ranking[type].losses++;
+      } else if (resultB === "win") {
+        userB.ranking[type].wins++;
+        userA.ranking[type].losses++;
+      } else {
+        userA.ranking[type].draws =
+          (userA.ranking[type].draws || 0) + 1;
+        userB.ranking[type].draws =
+          (userB.ranking[type].draws || 0) + 1;
+      }
+
+      await Promise.all([
+        userA.save({ session }),
+        userB.save({ session }),
+      ]);
+
+      // ---------------- MATCH ----------------
+      const [match] = await Match.create(
+        [
+          {
+            players: [userA._id, userB._id],
+            winner,
+            loser,
+            mode: type,
+            matchType: "ranked",
+            points: Math.abs(resA.totalPoints - resB.totalPoints),
+            energySpent: RANKED_ENERGY_COST * 2,
+            playerData: [
+              {
+                user: userA._id,
+                combo: resA.combo._id,
+                points: resA.totalPoints,
+                energySpent: RANKED_ENERGY_COST,
+                result: resultA,
+                eloBefore: eloSnapshot.userA,
+                eloAfter: newEloA,
+                breakdown: { elementsStepData: resA.stepData },
+              },
+              {
+                user: userB._id,
+                combo: resB.combo._id,
+                points: resB.totalPoints,
+                energySpent: RANKED_ENERGY_COST,
+                result: resultB,
+                eloBefore: eloSnapshot.userB,
+                eloAfter: newEloB,
+                breakdown: { elementsStepData: resB.stepData },
+              },
+            ],
+            rulesSnapshot: {
+              type,
+              matchType: "ranked",
+              rankedEnergyCost: RANKED_ENERGY_COST,
+              kFactor: K_FACTOR,
+            },
+          },
+        ],
+        { session }
+      );
+
+      await Promise.all([
+        User.updateOne(
+          { _id: userA._id },
+          { $push: { "matches.ranked": match._id } },
+          { session }
+        ),
+        User.updateOne(
+          { _id: userB._id },
+          { $push: { "matches.ranked": match._id } },
+          { session }
+        ),
+      ]);
+
+      await session.commitTransaction();
+      session.endSession();
+
+      const io = getIO();
+      emitToUser(io, userA._id, "rankedMatchCompleted", { matchId: match._id });
+      emitToUser(io, userB._id, "rankedMatchCompleted", { matchId: match._id });
+
+      return { match };
+    } catch (error) {
+        try {
+          if (session.inTransaction()) {
+            await session.abortTransaction();
+          }
+        } finally {
+          session.endSession();
+        }
+
+        throw error;
     }
-
-    if (userA.stats.energy < RANKED_ENERGY_COST || userB.stats.energy < RANKED_ENERGY_COST) {
-      throw new Error("Alguno de los usuarios no tiene energía suficiente para ranked");
-    }
-
-    if (!["static", "dynamic"].includes(type)) {
-      throw new Error("Tipo de ranked inválido");
-    }
-
-    // ---------------------- CALCULAR RESULTADOS ----------------------
-    const [resA, resB] = await Promise.all([
-      calculateMatchResults(userA, type),
-      calculateMatchResults(userB, type),
-    ]);
-
-    // ---------------------- DETERMINAR GANADOR ----------------------
-    let resultA = "draw";
-    let resultB = "draw";
-    let winner = null;
-    let loser = null;
-
-    if (resA.totalPoints > resB.totalPoints) {
-      resultA = "win";
-      resultB = "loss";
-      winner = userA._id;
-      loser = userB._id;
-    } else if (resB.totalPoints > resA.totalPoints) {
-      resultA = "loss";
-      resultB = "win";
-      winner = userB._id;
-      loser = userA._id;
-    }
-
-    // ---------------------- CALCULO ELO ----------------------
-    const expectedA = 1 / (1 + Math.pow(10, (eloSnapshot.userB - eloSnapshot.userA) / 400));
-    const expectedB = 1 - expectedA;
-
-    let scoreA = resultA === "win" ? 1 : resultA === "loss" ? 0 : 0.5;
-    let scoreB = 1 - scoreA;
-
-    const newEloA = Math.round(eloSnapshot.userA + K_FACTOR * (scoreA - expectedA));
-    const newEloB = Math.round(eloSnapshot.userB + K_FACTOR * (scoreB - expectedB));
-
-    // ---------------------- PLAYER DATA ----------------------
-    const playerData = [
-      {
-        user: userA._id,
-        combo: resA.combo._id,
-        points: resA.totalPoints,
-        energySpent: RANKED_ENERGY_COST,
-        result: resultA,
-        eloBefore: eloSnapshot.userA,
-        eloAfter: newEloA,
-        breakdown: { elementsStepData: resA.stepData },
-      },
-      {
-        user: userB._id,
-        combo: resB.combo._id,
-        points: resB.totalPoints,
-        energySpent: RANKED_ENERGY_COST,
-        result: resultB,
-        eloBefore: eloSnapshot.userB,
-        eloAfter: newEloB,
-        breakdown: { elementsStepData: resB.stepData },
-      },
-    ];
-
-    // ---------------------- ACTUALIZAR USUARIOS ----------------------
-    userA.ranking[type].elo = newEloA;
-    userB.ranking[type].elo = newEloB;
-
-    if (resultA === "win") {
-      userA.ranking[type].wins++;
-      userB.ranking[type].losses++;
-    } else if (resultB === "win") {
-      userB.ranking[type].wins++;
-      userA.ranking[type].losses++;
-    } else {
-      // Opcional: si quieres guardar empates, puedes añadir draws en tu esquema
-      userA.ranking[type].draws = (userA.ranking[type].draws || 0) + 1;
-      userB.ranking[type].draws = (userB.ranking[type].draws || 0) + 1;
-    }
-
-    // Gastar energía
-    userA.stats.energy -= RANKED_ENERGY_COST;
-    userB.stats.energy -= RANKED_ENERGY_COST;
-
-    // ---------------------- ACTUALIZAR TIER ----------------------
-    userA.updateTier(type);
-    userB.updateTier(type);
-
-    await Promise.all([userA.save(), userB.save()]);
-
-    // ---------------------- CREAR MATCH ----------------------
-    const match = await Match.create({
-      players: [userA._id, userB._id],
-      playerData,
-      winner,
-      loser,
-      mode: type,
-      matchType: "ranked",
-      points: Math.abs(resA.totalPoints - resB.totalPoints),
-      energySpent: RANKED_ENERGY_COST * 2,
-      rulesSnapshot: {
-        type,
-        matchType: "ranked",
-        rankedEnergyCost: RANKED_ENERGY_COST,
-        kFactor: K_FACTOR,
-      },
-    });
-
-    await Promise.all([
-      User.updateOne({ _id: userA._id }, { $push: { "matches.ranked": match._id } }),
-      User.updateOne({ _id: userB._id }, { $push: { "matches.ranked": match._id } }),
-    ]);
-
-    // ---------------------- SOCKET ----------------------
-    const io = getIO();
-    emitToUser(io, userA._id, "rankedMatchCompleted", { matchId: match._id });
-    emitToUser(io, userB._id, "rankedMatchCompleted", { matchId: match._id });
-
-    return {
-      match,
-      results: { userA: { combo: resA.combo, totalPoints: resA.totalPoints, result: resultA, eloBefore: eloSnapshot.userA, eloAfter: newEloA },
-                 userB: { combo: resB.combo, totalPoints: resB.totalPoints, result: resultB, eloBefore: eloSnapshot.userB, eloAfter: newEloB } }
-    };
   },
 };
 

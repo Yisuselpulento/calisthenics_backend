@@ -18,6 +18,7 @@ import userRoutes from "./src/routes/user.route.js";
 import feedRoutes from "./src/routes/feed.route.js";
 import matchRoutes from "./src/routes/match.route.js";
 import challengeRoutes from "./src/routes/challenge.route.js";
+import energyRoutes from "./src/routes/energy.route.js";
 
 import { setIO } from "./src/Sockets/io.js";
 import { initMatchSockets } from "./src/Sockets/matchSockets.js";
@@ -45,6 +46,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/feed", feedRoutes);
 app.use("/api/match", matchRoutes);
 app.use("/api/challenge", challengeRoutes);
+app.use("/api/energy",energyRoutes);
 
 app.get("/api/check-cookie", (req, res) => {
   const tokenCookie = req.cookies.token;

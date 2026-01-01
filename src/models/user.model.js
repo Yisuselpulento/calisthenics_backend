@@ -94,12 +94,22 @@ videoProfile: {
 },
 
     stats: {
-      mainAura: { type: Number, default: 0 },
-      staticAura: { type: Number, default: 0 },
-      dynamicAura: { type: Number, default: 0 },
-      energy: { type: Number, default: 1000 },
-      lastUpdated: { type: Date, default: new Date(0) }
-    },
+  mainAura: { type: Number, default: 0 },
+  staticAura: { type: Number, default: 0 },
+  dynamicAura: { type: Number, default: 0 },
+
+  energy: { type: Number, default: 1000 },
+
+  // 🔒 Timestamp genérico (NO SE TOCA)
+  lastUpdated: { type: Date, default: new Date(0) },
+
+  // ⚡ Solo energía
+  energyLastUpdatedAt: { type: Date, default: Date.now },
+
+  // 🔥 Boosts
+  energyRegenMultiplier: { type: Number, default: 1 },
+  energyRegenBoostUntil: { type: Date, default: null },
+},
 
     /* ---------------------- RELACIONES ---------------------- */
 
@@ -163,12 +173,14 @@ videoProfile: {
     tier: { type: String, default: "Bronze" },
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
+     draws: { type: Number, default: 0 },
   },
   dynamic: {
     elo: { type: Number, default: 1000 },
     tier: { type: String, default: "Bronze" },
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
+     draws: { type: Number, default: 0 },
     },
   },
   
@@ -205,17 +217,6 @@ videoProfile: {
   },
   { timestamps: true }
 );
-
-UserSchema.methods.updateTier = function (type) {
-  if (!["static", "dynamic"].includes(type)) return;
-
-  const elo = this.ranking[type].elo;
-
-  if (elo < 1000) this.ranking[type].tier = "Bronze";
-  else if (elo < 1500) this.ranking[type].tier = "Silver";
-  else if (elo < 2000) this.ranking[type].tier = "Gold";
-  else this.ranking[type].tier = "Diamond";
-};
 
 
 export default mongoose.model("User", UserSchema);
