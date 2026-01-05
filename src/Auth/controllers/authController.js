@@ -123,7 +123,6 @@ export const signup = async (req, res) => {
 
 
 export const login = async (req,res) => {
-
     const { email, password  } = req.body;
 	try {
 
@@ -177,14 +176,15 @@ export const login = async (req,res) => {
         user.lockUntil = undefined;
         await user.save();
 
-		generateTokenAndSetCookie(res, user)
+		const token = generateTokenAndSetCookie(res, user);
 
 		 const fullUser = await UpdateFullUser(user._id);
 
                     res.status(200).json({
                     success: true,
                     message: "Inicio de sesión exitoso",
-                    user: fullUser
+                    user: fullUser,
+                    token
                     });
 	} catch (error) {
 		console.log("Error al iniciar session ", error);
