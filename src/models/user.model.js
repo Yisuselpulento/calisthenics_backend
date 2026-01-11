@@ -75,7 +75,7 @@ const UserSchema = new Schema(
     avatar: {
         url: {
     type: String,
-    default: "https://upload.wikimedia.org/wikipedia/commons/b/b5/Windows_10_Default_Profile_Picture.svg",
+    default: "https://i.pinimg.com/1200x/3c/67/75/3c67757cef723535a7484a6c7bfbfc43.jpg",
           },
           publicId: {
             type: String,
