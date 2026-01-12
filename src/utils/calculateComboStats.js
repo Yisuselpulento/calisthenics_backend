@@ -37,16 +37,16 @@ export const calculateComboPointsStepByStep = (elements, userEnergy = 1000) => {
       hold,
       reps,
       fingers,
-      basePoints,
-      pointsWithFingers,
+      basePoints: Math.ceil(basePoints),
+      pointsWithFingers: Math.ceil(pointsWithFingers),
       cleanFactor,
-      pointsWithCleanHit,
-      totalPointsSoFar: totalPoints,
+      pointsWithCleanHit: Math.ceil(pointsWithCleanHit),
+      totalPointsSoFar: Math.ceil(totalPoints),
     });
   });
 
   return {
-    totalPoints,
+    totalPoints: Math.ceil(totalPoints),
     elementsStepData,
   };
 };
