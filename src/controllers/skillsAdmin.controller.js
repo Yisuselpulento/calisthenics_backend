@@ -50,9 +50,22 @@ export const getAllSkills = async (req, res) => {
   try {
     const skills = await Skill.find();
 
+    const skillsWithSortedVariants = skills.map((skill) => {
+      const sortedVariants = [...skill.variants].sort((a, b) => {
+        const totalA = (a.staticAu || 0) + (a.dynamicAu || 0);
+        const totalB = (b.staticAu || 0) + (b.dynamicAu || 0);
+        return totalA - totalB; // menor a mayor
+      });
+
+      return {
+        ...skill.toObject(),
+        variants: sortedVariants,
+      };
+    });
+
     return res.json({
       success: true,
-      data: skills,
+      data: skillsWithSortedVariants,
     });
   } catch (error) {
     console.error("Error get all skills:", error);
