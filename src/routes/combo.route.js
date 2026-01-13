@@ -23,7 +23,13 @@ router.post(
 router.get("/", verifyAuth, getUserCombos);
 router.get("/:comboId", verifyAuth, getComboById);
 router.delete("/:comboId", verifyAuth, deleteCombo);
-router.put("/:comboId", verifyAuth, upload.single("video"), updateCombo);
+router.put(
+  "/:comboId",
+  verifyAuth,
+  upload.single("video"),
+  multerErrorHandler, // 👈 FALTA
+  updateCombo
+);
 router.post("/favorite/:comboId", verifyAuth, toggleFavoriteCombo);
 
 export default router;

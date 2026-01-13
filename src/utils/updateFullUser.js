@@ -112,6 +112,6 @@ export const UpdateFullUser = async (userId) => {
     favoriteCombos: user.favoriteCombos,
     skills,
     combos: user.combos,
-    matches: user.matches, // ⚠ corregido
+    matches: user.matches
   };
 };

@@ -442,7 +442,7 @@ export const getComboById = async (req, res) => {
 
       return {
         userSkill: el.userSkill,
-
+        userSkillVariantId: el.userSkillVariantId,
         // skill original
         skillName: userSkill.skill.name,
 
@@ -504,34 +504,44 @@ export const updateCombo = async (req, res) => {
   try {
     const { comboId } = req.params;
     const userId = req.userId;
-    const { name, elements } = req.body;
+    const { name } = req.body;
 
-    if (!comboId) return res.status(400).json({ success: false, message: "El ID del combo es requerido" });
+    const elements = req.body.elements
+      ? JSON.parse(req.body.elements)
+      : null;
 
-    const combo = await Combo.findById(comboId);
-    if (!combo) return res.status(404).json({ success: false, message: "Combo no encontrado" });
-
-    if (String(combo.user) !== String(userId))
-      return res.status(403).json({ success: false, message: "No tienes permiso para actualizar este combo" });
-
-    // ✅ Actualizar video si viene archivo nuevo
-    if (req.file) {
-      uploadResult = await uploadToCloudinary(req.file, "combo_videos");
-      
-      // Borrar video antiguo si existe
-      if (combo.video) {
-        await deleteFromCloudinary(combo.video);
-      }
-
-      combo.video = uploadResult.secure_url;
+    /* ------------------ Validaciones base ------------------ */
+    if (!comboId) {
+      return res.status(400).json({
+        success: false,
+        message: "El ID del combo es requerido",
+      });
     }
 
-    // ✅ Actualizar nombre
-    if (name) combo.name = name;
+    const combo = await Combo.findById(comboId);
+    if (!combo) {
+      return res.status(404).json({
+        success: false,
+        message: "Combo no encontrado",
+      });
+    }
 
-    // ✅ Actualizar holds/reps de elementos
+    if (String(combo.user) !== String(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "No tienes permiso para actualizar este combo",
+      });
+    }
+
+    /* ------------------ Actualizar nombre ------------------ */
+    if (typeof name === "string" && name.trim().length > 0) {
+      combo.name = name.trim();
+    }
+
+    /* ------------------ Detectar cambios en elementos ------------------ */
+    let elementsChanged = false;
+
     if (elements && Array.isArray(elements)) {
-      // Crear un mapa rápido de elementos actuales por userSkillVariantId
       const elementMap = new Map();
       combo.elements.forEach(el => {
         elementMap.set(String(el.userSkillVariantId), el);
@@ -539,50 +549,125 @@ export const updateCombo = async (req, res) => {
 
       for (const el of elements) {
         const comboElement = elementMap.get(String(el.userSkillVariantId));
+
         if (!comboElement) {
           return res.status(400).json({
             success: false,
-            message: `No puedes modificar elementos que no pertenecen al combo: ${el.userSkillVariantId}`
+            message: "No puedes modificar elementos que no pertenecen al combo",
           });
         }
 
-        // Actualizar solo hold y reps
-        if (el.hold !== undefined) comboElement.hold = el.hold;
-        if (el.reps !== undefined) comboElement.reps = el.reps;
-
-        // Validación: al menos hold o reps > 0 según stats
-        const usesHold = comboElement.variantData.stats.energyPerSecond > 0;
-        if (usesHold && comboElement.hold < 1) {
-          return res.status(400).json({
-            success: false,
-            message: `Variante ${comboElement.variantData.name} requiere hold en segundos`
-          });
-        }
-        if (!usesHold && comboElement.reps < 1) {
-          return res.status(400).json({
-            success: false,
-            message: `Variante ${comboElement.variantData.name} requiere reps`
-          });
+        if (
+          (el.hold !== undefined && el.hold !== comboElement.hold) ||
+          (el.reps !== undefined && el.reps !== comboElement.reps)
+        ) {
+          elementsChanged = true;
+          break;
         }
       }
+    }
 
-      // Recalcular energía total
+    /* ------------------ Validar video obligatorio ------------------ */
+    if (elementsChanged && !req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Si modificas los segundos o repeticiones debes subir un nuevo video",
+      });
+    }
+
+    /* ------------------ Subir nuevo video ------------------ */
+    if (req.file) {
+      uploadResult = await uploadToCloudinary(
+        req.file,
+        cloudinaryFolder({
+          username: req.user.username,
+          type: "user_combos",
+        })
+      );
+
+      if (combo.video?.publicId) {
+        await deleteFromCloudinary(combo.video.publicId, "video");
+      }
+
+      combo.video = {
+        url: uploadResult.url,
+        publicId: uploadResult.publicId,
+      };
+    }
+
+    /* ------------------ Actualizar elementos ------------------ */
+    if (elements && Array.isArray(elements)) {
+      const elementMap = new Map();
+      combo.elements.forEach(el => {
+        elementMap.set(String(el.userSkillVariantId), el);
+      });
+
+      for (const el of elements) {
+        const comboElement = elementMap.get(String(el.userSkillVariantId));
+        const stats = comboElement.variantData.stats;
+
+        const usesHold = stats.energyPerSecond > 0;
+
+        const hold = el.hold ?? comboElement.hold;
+        const reps = el.reps ?? comboElement.reps;
+
+        if (usesHold && hold < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `La variante ${comboElement.variantData.name} requiere hold`,
+          });
+        }
+
+        if (!usesHold && reps < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `La variante ${comboElement.variantData.name} requiere reps`,
+          });
+        }
+
+        comboElement.hold = usesHold ? hold : 0;
+        comboElement.reps = usesHold ? 0 : reps;
+      }
+
+      /* ------------------ Recalcular energía ------------------ */
       combo.totalEnergyCost = combo.elements.reduce((total, el) => {
-        const usesHold = el.variantData.stats.energyPerSecond > 0;
-        return total + (usesHold ? el.hold * el.variantData.stats.energyPerSecond : el.reps * el.variantData.stats.energyPerRep);
+        const stats = el.variantData.stats;
+        return total + (
+          stats.energyPerSecond > 0
+            ? el.hold * stats.energyPerSecond
+            : el.reps * stats.energyPerRep
+        );
       }, 0);
 
-      // Validar que el usuario tenga suficiente energía
+      /* ------------------ Recalcular puntos ------------------ */
+      combo.totalPoints = combo.elements.reduce((total, el) => {
+        const stats = el.variantData.stats;
+        return total + (
+          stats.pointsPerSecond > 0
+            ? el.hold * stats.pointsPerSecond
+            : el.reps * stats.pointsPerRep
+        );
+      }, 0);
+
+      /* ------------------ Validar energía del usuario ------------------ */
       const user = await User.findById(userId);
-      const userEnergy = combo.type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
+
+      const userEnergy =
+        combo.type === "static"
+          ? user.stats.staticAura
+          : user.stats.dynamicAura;
+
       if (combo.totalEnergyCost > userEnergy) {
         return res.status(400).json({
           success: false,
-          message: "No tienes suficiente energía para este combo con los cambios realizados"
+          message:
+            "No tienes suficiente energía para este combo con los cambios realizados",
         });
       }
     }
 
+    /* ------------------ Guardar ------------------ */
     await combo.save();
 
     const updatedUser = await UpdateFullUser(userId);
@@ -591,20 +676,22 @@ export const updateCombo = async (req, res) => {
       success: true,
       message: "Combo actualizado correctamente",
       combo,
-      user: updatedUser
+      user: updatedUser,
     });
 
-  } catch (err) {
-    // Borrar video subido en caso de error
-    if (uploadResult?.secure_url) await deleteFromCloudinary(uploadResult.secure_url);
+  } catch (error) {
+    if (uploadResult?.publicId) {
+      await deleteFromCloudinary(uploadResult.publicId, "video");
+    }
 
-    console.error("Error en updateCombo:", err);
-     return res.status(500).json({
+    console.error("updateCombo error:", error);
+    return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
     });
   }
 };
+
 
 /* ---------------------------- FAVORITE ---------------------------- */
 
