@@ -42,16 +42,34 @@ export const createChallenge = async (req, res) => {
       });
     }
 
+     const [fromUser, toUser] = await Promise.all([
+      User.findById(fromUserId).select("hasPendingChallenge"),
+      User.findById(toUserId).select("hasPendingChallenge"),
+    ]);
+
+    if (!fromUser || !toUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+
+    if (fromUser.hasPendingChallenge || toUser.hasPendingChallenge) {
+      return res.status(409).json({
+        success: false,
+        message: "Uno de los usuarios ya tiene un desafío pendiente",
+      });
+    }
+
+
     // ❌ Bloquear si alguno tiene challenge pendiente
     const pendingExists = await Challenge.exists({
-      status: "pending",
-      $or: [
-        { fromUser: fromUserId },
-        { toUser: fromUserId },
-        { fromUser: toUserId },
-        { toUser: toUserId },
-      ],
-    });
+  status: "pending",
+  $or: [
+    { fromUser: fromUserId, toUser: toUserId },
+    { fromUser: toUserId, toUser: fromUserId },
+  ],
+});
 
     if (pendingExists) {
       return res.status(409).json({
