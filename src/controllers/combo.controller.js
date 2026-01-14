@@ -2,7 +2,6 @@ import Combo from "../models/combo.model.js";
 import User from "../models/user.model.js";
 import UserSkill from "../models/userSkill.model.js";
 import Skill from "../models/skill.model.js"; // para conocer las variantes y stats
-import { calculateEnergyCost } from "../utils/calculateEnergyCost.js";
 import FeedEvent from "../models/feedEvent.model.js";
 import { UpdateFullUser } from "../utils/updateFullUser.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary.js";
@@ -64,6 +63,14 @@ export const createCombo = async (req, res) => {
         message: "Usuario no encontrado",
       });
     }
+
+    if (user.stats.energy < 400) {
+  return res.status(400).json({
+    success: false,
+    message: "No tienes suficiente energía para crear un combo",
+  });
+}
+
 
     /* ------------------ Validar y construir elementos ------------------ */
     let totalEnergyCost = 0;
@@ -193,6 +200,11 @@ export const createCombo = async (req, res) => {
       },
       totalEnergyCost,
     });
+
+    /* ------------------ Descontar energía ------------------ */
+await User.findByIdAndUpdate(userId, {
+  $inc: { "stats.energy": -400 },
+});
 
     /* ------------------ usedInCombos ------------------ */
     for (const el of comboElements) {

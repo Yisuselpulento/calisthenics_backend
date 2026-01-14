@@ -85,6 +85,23 @@ export const addSkillVariant = async (req, res) => {
       });
     }
 
+    /* ------------------ Validar energía ------------------ */
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+
+    if (user.stats.energy < 200) {
+      return res.status(400).json({
+        success: false,
+        message: "No tienes suficiente energía para aprender esta skill",
+      });
+    }
+
     /* ------------------ Subir video ------------------ */
     uploadResult = await uploadToCloudinary(
   req.file,
@@ -110,6 +127,10 @@ export const addSkillVariant = async (req, res) => {
     /* ------------------ Asociar skill al usuario ------------------ */
     await User.findByIdAndUpdate(userId, {
       $addToSet: { skills: userSkill._id }
+    });
+
+     await User.findByIdAndUpdate(userId, {
+      $inc: { "stats.energy": -200 },
     });
 
     const newVariant =
