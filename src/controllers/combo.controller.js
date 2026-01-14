@@ -124,15 +124,6 @@ export const createCombo = async (req, res) => {
         });
       }
 
-      if (
-        type === "dynamic" &&
-        !["dynamic", "basic"].includes(skillVariant.type)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "No puedes usar variantes estáticas en un combo dinámico",
-        });
-      }
 
       /* -------- Hold / Reps -------- */
       const usesHold = skillVariant.stats.energyPerSecond > 0;

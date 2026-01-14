@@ -112,6 +112,7 @@ export const updateVariant = async (req, res) => {
       progressionLevel,
     } = req.body;
 
+    /* ------------------ Buscar Skill ------------------ */
     const skill = await Skill.findOne({ skillKey });
     if (!skill) {
       return res.status(404).json({
@@ -120,6 +121,7 @@ export const updateVariant = async (req, res) => {
       });
     }
 
+    /* ------------------ Buscar Variante ------------------ */
     const variant = skill.variants.find(v => v.variantKey === variantKey);
     if (!variant) {
       return res.status(404).json({
@@ -128,6 +130,11 @@ export const updateVariant = async (req, res) => {
       });
     }
 
+    /* ------------------ Guardar valores previos ------------------ */
+    const prevStaticAu = variant.staticAu;
+    const prevDynamicAu = variant.dynamicAu;
+
+    /* ------------------ Validar type ------------------ */
     const allowedTypes = ["static", "dynamic", "basic"];
     if (type && !allowedTypes.includes(type)) {
       return res.status(400).json({
@@ -136,6 +143,7 @@ export const updateVariant = async (req, res) => {
       });
     }
 
+    /* ------------------ Validar difficulty ------------------ */
     const allowedDifficulties = [
       "basic",
       "intermediate",
@@ -151,6 +159,7 @@ export const updateVariant = async (req, res) => {
       });
     }
 
+    /* ------------------ progressionLevel ------------------ */
     if (progressionLevel !== undefined) {
       if (progressionLevel < 1 || progressionLevel > 4) {
         return res.status(400).json({
@@ -161,6 +170,7 @@ export const updateVariant = async (req, res) => {
       variant.progressionLevel = progressionLevel;
     }
 
+    /* ------------------ Stats ------------------ */
     if (stats) {
       const allowedStats = [
         "pointsPerSecond",
@@ -181,6 +191,7 @@ export const updateVariant = async (req, res) => {
       Object.assign(variant.stats, stats);
     }
 
+    /* ------------------ Campos simples ------------------ */
     if (name) variant.name = name;
     if (type) variant.type = type;
     if (difficulty) variant.difficulty = difficulty;
@@ -189,7 +200,25 @@ export const updateVariant = async (req, res) => {
 
     variant.lastStatChange = new Date();
 
+    /* ------------------ Guardar Skill ------------------ */
     await skill.save();
+
+    /* ------------------ Recalcular Users si cambió el aura ------------------ */
+    const auraChanged =
+      prevStaticAu !== variant.staticAu ||
+      prevDynamicAu !== variant.dynamicAu;
+
+    if (auraChanged) {
+      const userSkills = await UserSkill.find({ skill: skill._id }).select("user");
+
+      const affectedUsers = [
+        ...new Set(userSkills.map(us => String(us.user)))
+      ];
+
+      await Promise.all(
+        affectedUsers.map(userId => recalculateUserStats(userId))
+      );
+    }
 
     return res.json({
       success: true,
@@ -211,6 +240,7 @@ export const deleteVariant = async (req, res) => {
   try {
     const { skillKey, variantKey } = req.params;
 
+    /* ------------------ Buscar Skill ------------------ */
     const skill = await Skill.findOne({ skillKey });
     if (!skill) {
       return res.status(404).json({
@@ -219,17 +249,35 @@ export const deleteVariant = async (req, res) => {
       });
     }
 
-    const before = skill.variants.length;
-    skill.variants = skill.variants.filter(v => v.variantKey !== variantKey);
+    /* ------------------ Verificar Variante ------------------ */
+    const variantExists = skill.variants.some(
+      v => v.variantKey === variantKey
+    );
 
-    if (skill.variants.length === before) {
+    if (!variantExists) {
       return res.status(404).json({
         success: false,
         message: "Variante no encontrada",
       });
     }
 
+    /* ------------------ Eliminar Variante ------------------ */
+    skill.variants = skill.variants.filter(
+      v => v.variantKey !== variantKey
+    );
+
     await skill.save();
+
+    /* ------------------ Recalcular users afectados ------------------ */
+    const userSkills = await UserSkill.find({ skill: skill._id }).select("user");
+
+    const affectedUsers = [
+      ...new Set(userSkills.map(us => String(us.user)))
+    ];
+
+    await Promise.all(
+      affectedUsers.map(userId => recalculateUserStats(userId))
+    );
 
     return res.json({
       success: true,
