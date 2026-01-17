@@ -126,3 +126,26 @@ export const getRankedLeaderboard = async (req, res) => {
     });
   }
 };
+
+export const savePushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Token requerido",
+      });
+    }
+
+    await User.findByIdAndUpdate(
+      req.userId,
+      { $addToSet: { pushTokens: token } }
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("savePushToken error:", err);
+    res.status(500).json({ success: false });
+  }
+};

@@ -204,6 +204,13 @@ videoProfile: {
     default: true,
   },
 
+  /* ---------------------- PUSH NOTIFICATIONS ---------------------- */
+
+    pushTokens: {
+      type: [String],
+      default: [],
+    },
+
     /* ---------------------- NOTIFICATIONS ---------------------- */
 
     notifications: [
