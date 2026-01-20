@@ -6,6 +6,7 @@ import { getIO } from "../Sockets/io.js";
 import MatchService from "../services/match.service.js";
 import { cleanupChallenge } from "../utils/cleanupChallenge.js";
 import { syncChallengeUsers } from "../utils/syncChallengeUsers.js";
+import { sendPushNotification } from "../utils/pushHelper.js";
 
 
 /* ---------------------- HELPERS ---------------------- */
@@ -110,6 +111,19 @@ export const createChallenge = async (req, res) => {
           $push: { notifications: notification._id },
         }
       );
+
+      // 🔔 Notificar al usuario receptor vía push
+if (toUser.pushTokens?.length) {
+  const messageText = "Te han enviado un desafío 💪";
+
+  for (const token of toUser.pushTokens) {
+    sendPushNotification(token, "Nuevo desafío 💪", messageText, {
+      type: "challenge",
+      fromUser: fromUserId.toString(),
+      challengeId: challenge._id.toString(),
+    });
+  }
+}
 
       // 👤 Usuario que envía (sin notificación)
       await User.updateOne(
