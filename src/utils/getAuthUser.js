@@ -26,11 +26,9 @@ export const getAuthUser = (userId) => {
     .populate({
       path: "followers",
       select: "username fullName avatar",
-      options: { limit: 10 },
     })
     .populate({
       path: "following",
       select: "username fullName avatar",
-      options: { limit: 10 },
     });
 };
