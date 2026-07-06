@@ -2,8 +2,7 @@
 
 import User from "../models/user.model.js";
 import { applyEnergyRegen } from "../services/energy.service.js";
-
-const MAX_ENERGY = 1000;
+import { grantProduct } from "../services/entitlement.service.js";
 
 /**
  * Controlador 1: Boost temporal de energía (x2 regeneración por 3 días)
@@ -11,22 +10,16 @@ const MAX_ENERGY = 1000;
 export const buyEnergyBoost = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
+    if (!user)
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    const BOOST_MULTIPLIER = 2; // x2 regeneración
-    const BOOST_DURATION_DAYS = 3;
-
-    user.stats.energyRegenMultiplier = BOOST_MULTIPLIER;
-    user.stats.energyRegenBoostUntil = new Date(
-      Date.now() + BOOST_DURATION_DAYS * 24 * 60 * 60 * 1000
-    );
-
-    // Aplica regeneración antes de guardar
-    applyEnergyRegen(user);
-    await user.save();
+    // ⚠️ TEMPORAL: otorga GRATIS. En la Fase 1 (pagos) esto se reemplaza por el
+    // flujo verificado (webhook → processPurchase). No dejar libre una vez que se cobre.
+    await grantProduct(user, "boost_x2_3d");
 
     return res.status(200).json({
       success: true,
-      message: `Boost activado: x${BOOST_MULTIPLIER} regeneración por ${BOOST_DURATION_DAYS} días`,
+      message: "Boost x2 activado por 3 días",
       user: {
         _id: user._id,
         energy: user.stats.energy,
@@ -49,14 +42,11 @@ export const buyEnergyBoost = async (req, res) => {
 export const buyFullEnergy = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
+    if (!user)
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    // Aplica regeneración antes de recargar full
-    applyEnergyRegen(user);
-
-    user.stats.energy = MAX_ENERGY;
-    user.stats.energyLastUpdatedAt = new Date();
-
-    await user.save();
+    // ⚠️ TEMPORAL: otorga GRATIS. En la Fase 1 (pagos) se reemplaza por el flujo verificado.
+    await grantProduct(user, "full_energy");
 
     return res.status(200).json({
       success: true,
