@@ -1,6 +1,7 @@
 import Match from "../models/match.model.js";
 import User from "../models/user.model.js";
 import Combo from "../models/combo.model.js";
+import { calculateMatchResults } from "../utils/calculateMatchResults.js";
 
 export const getMatchByIdController = async (req, res) => {
   const { matchId } = req.params;
