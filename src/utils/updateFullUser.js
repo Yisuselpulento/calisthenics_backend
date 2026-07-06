@@ -6,7 +6,7 @@ import Match from "../models/match.model.js";
 import Team from "../models/team.model.js";
 import Notification from "../models/notification.model.js";
 
-export const UpdateFullUser = async (userId) => {
+export const UpdateFullUser = async (userId, viewerId = null) => {
   const user = await User.findById(userId)
     .populate({
       path: "skills",
@@ -32,10 +32,19 @@ export const UpdateFullUser = async (userId) => {
 
   if (!user) return null;
 
+  // Relación con quien mira el perfil (sin query extra: usa followers ya poblado).
+  // Si no se pasa viewerId, el que mira es el propio dueño (login, editar, etc.).
+  const effectiveViewer = viewerId || userId;
+  const isOwnProfile = String(effectiveViewer) === String(userId);
+  const isFollowing = !isOwnProfile
+    ? user.followers.some((f) => String(f._id) === String(effectiveViewer))
+    : false;
+
   // Procesar favoriteSkills
   const favoriteSkills = user.favoriteSkills
     .map((fs) => {
-      if (!fs.userSkill || !fs.userSkillVariantId) return null;
+      if (!fs.userSkill || !fs.userSkill.skill || !fs.userSkillVariantId)
+        return null;
       const userVariant = fs.userSkill.variants.find(
         (v) => v._id.toString() === fs.userSkillVariantId.toString()
       );
@@ -65,7 +74,9 @@ export const UpdateFullUser = async (userId) => {
     (a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)
   );
 
-  const skills = sortedSkills.map((us) => ({
+  const skills = sortedSkills
+    .filter((us) => us.skill) // ignora UserSkills huérfanos (Skill borrada)
+    .map((us) => ({
     userSkillId: us._id,
     skillId: us.skill._id,
     skillName: us.skill.name,
@@ -112,6 +123,8 @@ export const UpdateFullUser = async (userId) => {
     favoriteCombos: user.favoriteCombos,
     skills,
     combos: user.combos,
-    matches: user.matches
+    matches: user.matches,
+    isOwnProfile,
+    isFollowing,
   };
 };

@@ -33,11 +33,15 @@ export const markNotificationAsRead = async (req, res) => {
     const notification = await Notification.findOne({ _id: notificationId, user: userId });
     if (!notification) return res.status(404).json({ success: false, message: "Notificación no encontrada." });
 
+    const wasUnread = notification.read === false;
+
     notification.read = true;
     await notification.save();
 
-    // Actualizar el contador de notificaciones no leídas
-    await User.findByIdAndUpdate(userId, { $inc: { notificationsCount: -1 } });
+    // Solo descontar si realmente estaba sin leer (evita que el contador se vaya negativo)
+    if (wasUnread) {
+      await User.findByIdAndUpdate(userId, { $inc: { notificationsCount: -1 } });
+    }
 
     const updatedUser = await getAuthUser(userId);
 

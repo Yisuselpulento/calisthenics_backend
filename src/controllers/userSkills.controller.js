@@ -9,6 +9,7 @@ import { validateVariantProgression } from "../utils/variantValidation.js";
 import { getUserStats } from "../utils/getUserStats.js";
 import { createFeedEvent } from "../utils/createFeedEvent.js";
 import { cloudinaryFolder } from "../utils/cloudinaryFolder.js";
+import { applyEnergyRegen } from "../services/energy.service.js";
 
 // -------------------- Agregar Variante --------------------
 export const addSkillVariant = async (req, res) => {
@@ -95,7 +96,11 @@ export const addSkillVariant = async (req, res) => {
       });
     }
 
-    if (user.stats.energy < 200) {
+    // Regenerar energía según el tiempo transcurrido ANTES de validar/gastar
+    applyEnergyRegen(user);
+
+    const SKILL_ENERGY_COST = 200;
+    if (user.stats.energy < SKILL_ENERGY_COST) {
       return res.status(400).json({
         success: false,
         message: "No tienes suficiente energía para aprender esta skill",
@@ -129,9 +134,9 @@ export const addSkillVariant = async (req, res) => {
       $addToSet: { skills: userSkill._id }
     });
 
-     await User.findByIdAndUpdate(userId, {
-      $inc: { "stats.energy": -200 },
-    });
+    // Descontar el costo de aprendizaje + persistir la regeneración en un solo save
+    user.stats.energy -= SKILL_ENERGY_COST;
+    await user.save();
 
     const newVariant =
       userSkill.variants[userSkill.variants.length - 1];
@@ -401,6 +406,12 @@ export const deleteSkillVariant = async (req, res) => {
 
     // 🔹 Si quedan variantes: guardar y actualizar stats
     await userSkill.save();
+
+    // Quitar la variante borrada de favoritos si estaba (evita favoritos huérfanos)
+    await User.findByIdAndUpdate(userId, {
+      $pull: { favoriteSkills: { userSkillVariantId } },
+    });
+
     await getUserStats(userId);
 
     await FeedEvent.deleteMany({

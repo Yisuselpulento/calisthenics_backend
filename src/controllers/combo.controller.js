@@ -8,6 +8,7 @@ import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloud
 import mongoose from "mongoose";
 import { createFeedEvent } from "../utils/createFeedEvent.js";
 import { cloudinaryFolder } from "../utils/cloudinaryFolder.js";
+import { applyEnergyRegen } from "../services/energy.service.js";
 
 
 /* ---------------------------- CREATE ---------------------------- */
@@ -169,10 +170,26 @@ export const createCombo = async (req, res) => {
     }
 
     /* ------------------ Energía ------------------ */
-    const userEnergy =
+    // Regenerar energía según el tiempo transcurrido ANTES de validar/gastar
+    // (si no, se lee un valor viejo y puede bloquear injustamente).
+    applyEnergyRegen(user);
+
+    // 1) Gate de nivel: tu aura (poder) debe soportar la energía de ataque
+    //    del combo (totalEnergyCost). Mismo criterio que al editar un combo.
+    const userAura =
       type === "static" ? user.stats.staticAura : user.stats.dynamicAura;
 
-    if (totalEnergyCost > userEnergy) {
+    if (totalEnergyCost > userAura) {
+      return res.status(400).json({
+        success: false,
+        message: "No tienes suficiente nivel (aura) para este combo",
+      });
+    }
+
+    // 2) Costo de aprendizaje: tarifa fija de la energía regenerable
+    //    (stats.energy), igual que aprender una skill cuesta 200.
+    const COMBO_ENERGY_COST = 400;
+    if (user.stats.energy < COMBO_ENERGY_COST) {
       return res.status(400).json({
         success: false,
         message: "No tienes suficiente energía para crear este combo",
@@ -201,11 +218,6 @@ export const createCombo = async (req, res) => {
       totalEnergyCost,
     });
 
-    /* ------------------ Descontar energía ------------------ */
-await User.findByIdAndUpdate(userId, {
-  $inc: { "stats.energy": -400 },
-});
-
     /* ------------------ usedInCombos ------------------ */
     for (const el of comboElements) {
       const userSkill = await UserSkill.findById(el.userSkill);
@@ -224,6 +236,8 @@ await User.findByIdAndUpdate(userId, {
       }
     }
 
+    // Descontar el costo de aprendizaje + persistir la regeneración en un solo save
+    user.stats.energy -= COMBO_ENERGY_COST;
     user.combos.push(combo._id);
     await user.save();
 
@@ -318,14 +332,25 @@ export const deleteCombo = async (req, res) => {
     await Combo.findByIdAndDelete(comboId);
 
     /* ------------------ Actualizar usuario ------------------ */
+    // Solo limpiar el favorito si el combo borrado ERA el favorito de su tipo
+    const freshUser = await User.findById(userId).select("favoriteCombos");
+    const unsetFavorite = {};
+    if (
+      combo.type === "static" &&
+      String(freshUser?.favoriteCombos?.static) === String(comboId)
+    ) {
+      unsetFavorite["favoriteCombos.static"] = "";
+    }
+    if (
+      combo.type === "dynamic" &&
+      String(freshUser?.favoriteCombos?.dynamic) === String(comboId)
+    ) {
+      unsetFavorite["favoriteCombos.dynamic"] = "";
+    }
+
     await User.findByIdAndUpdate(userId, {
       $pull: { combos: comboId },
-      ...(combo.type === "static" && {
-        $unset: { "favoriteCombos.static": "" }
-      }),
-      ...(combo.type === "dynamic" && {
-        $unset: { "favoriteCombos.dynamic": "" }
-      })
+      ...(Object.keys(unsetFavorite).length ? { $unset: unsetFavorite } : {}),
     });
 
     /* ------------------ Eliminar eventos del feed ------------------ */

@@ -8,19 +8,20 @@ export const cleanupChallenge = async (challenge) => {
   /* ---------------------- 1. BORRAR NOTIFICACIONES ---------------------- */
   const notifications = await Notification.find({ challenge: challengeId });
   const notificationIds = notifications.map(n => n._id);
+  // Solo las NO leídas descuentan del badge (las leídas ya restaron al leerse)
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   await Notification.deleteMany({ challenge: challengeId });
 
   /* ---------------------- 2. LIMPIAR USUARIO RECEPTOR (SOLO toUser) ---------------------- */
   if (notificationIds.length > 0) {
     await User.updateOne(
-      {
-        _id: challenge.toUser,
-        notificationsCount: { $gt: 0 },
-      },
+      { _id: challenge.toUser },
       {
         $pull: { notifications: { $in: notificationIds } },
-        $inc: { notificationsCount: -notificationIds.length },
+        ...(unreadCount > 0
+          ? { $inc: { notificationsCount: -unreadCount } }
+          : {}),
       }
     );
   }

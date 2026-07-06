@@ -94,10 +94,14 @@ videoProfile: {
 },
 
     stats: {
+  // AURA = nivel/poder del user (suma del AU de sus skills). NO se gasta.
+  // Actúa como "gate": tu aura debe soportar el totalEnergyCost de un combo.
   mainAura: { type: Number, default: 0 },
   staticAura: { type: Number, default: 0 },
   dynamicAura: { type: Number, default: 0 },
 
+  // ENERGY = energía regenerable estilo móvil (max 1000, +2.5/min).
+  // Se GASTA al aprender: skill = 200, combo = 400.
   energy: { type: Number, default: 1000 },
 
   // 🔒 Timestamp genérico (NO SE TOCA)

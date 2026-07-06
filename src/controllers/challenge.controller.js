@@ -15,6 +15,37 @@ const getExpireTime = (isRematch = false) => {
   return isRematch ? 15 * 1000 : 10 * 1000;
 };
 
+/**
+ * Expiración perezosa: limpia un challenge que ya venció pero quedó "pending"
+ * (p.ej. si el server reinició y se perdió el setTimeout). Evita que un user
+ * quede bloqueado con hasPendingChallenge para siempre.
+ */
+const expireStaleChallenge = async (challengeId, userId) => {
+  if (!challengeId) return;
+
+  const challenge = await Challenge.findById(challengeId);
+
+  // Referencia colgada (el challenge ya no existe): limpiar estado del user
+  if (!challenge) {
+    await User.updateOne(
+      { _id: userId },
+      { hasPendingChallenge: false, pendingChallenge: null }
+    );
+    return;
+  }
+
+  const isStale =
+    challenge.status !== "pending" || challenge.expiresAt <= new Date();
+  if (!isStale) return;
+
+  if (challenge.status === "pending") {
+    challenge.status = "expired";
+    await challenge.save();
+  }
+
+  await cleanupChallenge(challenge);
+};
+
 /* ---------------------- CREATE CHALLENGE ---------------------- */
 
 export const createChallenge = async (req, res) => {
@@ -44,8 +75,8 @@ export const createChallenge = async (req, res) => {
     }
 
      const [fromUser, toUser] = await Promise.all([
-      User.findById(fromUserId).select("hasPendingChallenge"),
-      User.findById(toUserId).select("hasPendingChallenge"),
+      User.findById(fromUserId).select("hasPendingChallenge pendingChallenge"),
+      User.findById(toUserId).select("hasPendingChallenge pendingChallenge"),
     ]);
 
     if (!fromUser || !toUser) {
@@ -55,7 +86,19 @@ export const createChallenge = async (req, res) => {
       });
     }
 
-    if (fromUser.hasPendingChallenge || toUser.hasPendingChallenge) {
+    // Limpiar challenges vencidos/colgados antes de bloquear
+    await Promise.all([
+      expireStaleChallenge(fromUser.pendingChallenge, fromUserId),
+      expireStaleChallenge(toUser.pendingChallenge, toUserId),
+    ]);
+
+    // Re-leer el estado tras la posible limpieza
+    const [freshFrom, freshTo] = await Promise.all([
+      User.findById(fromUserId).select("hasPendingChallenge"),
+      User.findById(toUserId).select("hasPendingChallenge"),
+    ]);
+
+    if (freshFrom.hasPendingChallenge || freshTo.hasPendingChallenge) {
       return res.status(409).json({
         success: false,
         message: "Uno de los usuarios ya tiene un desafío pendiente",
